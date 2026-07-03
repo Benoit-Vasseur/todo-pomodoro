@@ -18,6 +18,7 @@
     "format": "prettier --write --experimental-cli ."
   },
   "dependencies": {
+    "idb": "^8.0.3",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0"
   },
@@ -38,6 +39,7 @@
     "eslint-plugin-oxlint": "~1.69.0",
     "eslint-plugin-playwright": "^2.10.4",
     "eslint-plugin-vue": "~10.9.2",
+    "fake-indexeddb": "^6.2.5",
     "jiti": "^2.7.0",
     "npm-run-all2": "^9.0.2",
     "oxlint": "~1.69.0",

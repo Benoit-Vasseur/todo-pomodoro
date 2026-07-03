@@ -18,6 +18,7 @@ export default defineConfig({
         test: {
           name: 'unit',
           environment: 'node',
+          setupFiles: ['fake-indexeddb/auto'],
           include: ['src/**/*.spec.ts'],
           exclude: ['src/components/**'],
           root: fileURLToPath(new URL('./', import.meta.url)),
