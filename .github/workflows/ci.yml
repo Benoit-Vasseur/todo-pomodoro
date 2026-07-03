@@ -25,7 +25,9 @@ jobs:
 
       - run: pnpm build
 
-      - run: pnpm test:unit -- --run
+      - run: pnpm test:unit --run
+
+      - run: pnpm test:component --run
 
       - run: pnpm exec playwright install --with-deps
       - run: pnpm test:e2e
