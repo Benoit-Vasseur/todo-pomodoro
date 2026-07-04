@@ -28,4 +28,3 @@ export function getDb(): Promise<IDBPDatabase> {
   }
   return dbPromise
 }
-
