@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 
+function assertDefined<T>(value: T): asserts value is NonNullable<T> {
+  expect(value).toBeDefined()
+}
+
 beforeEach(async () => {
   const dbModule = await import('@/db')
   dbModule._resetDb()
@@ -19,8 +23,10 @@ describe('useTasks', () => {
     await loadTasks()
 
     expect(tasks.value).toHaveLength(1)
-    expect(tasks.value[0].title).toBe('Faire les courses')
-    expect(tasks.value[0].done).toBe(false)
+    const task = tasks.value[0]
+    assertDefined(task)
+    expect(task.title).toBe('Faire les courses')
+    expect(task.done).toBe(false)
   })
 
   it('bascule le statut done', async () => {
@@ -28,10 +34,16 @@ describe('useTasks', () => {
 
     await addTask('Apprendre Vitest')
     await loadTasks()
-    await toggleTask(tasks.value[0].id!)
+
+    const firstTask = tasks.value[0]
+    assertDefined(firstTask)
+    assertDefined(firstTask.id)
+    await toggleTask(firstTask.id)
 
     await loadTasks()
-    expect(tasks.value[0].done).toBe(true)
+    const toggledTask = tasks.value[0]
+    assertDefined(toggledTask)
+    expect(toggledTask.done).toBe(true)
   })
 
   it('supprime une tâche', async () => {
@@ -39,7 +51,11 @@ describe('useTasks', () => {
 
     await addTask('À supprimer')
     await loadTasks()
-    await removeTask(tasks.value[0].id!)
+
+    const taskToRemove = tasks.value[0]
+    assertDefined(taskToRemove)
+    assertDefined(taskToRemove.id)
+    await removeTask(taskToRemove.id)
     await loadTasks()
 
     expect(tasks.value).toHaveLength(0)
