@@ -29,18 +29,3 @@ export function getDb(): Promise<IDBPDatabase> {
   return dbPromise
 }
 
-/** Pour les tests uniquement — vide le cache de connexion */
-export function _resetDb(): void {
-  dbPromise = null
-}
-
-/** Pour les tests uniquement — vide toutes les stores */
-export async function _clearAll(): Promise<void> {
-  const db = await getDb()
-  const stores = Array.from(db.objectStoreNames)
-  const tx = db.transaction(stores, 'readwrite')
-  for (const store of stores) {
-    tx.objectStore(store).clear()
-  }
-  await tx.done
-}

@@ -5,9 +5,14 @@ function assertDefined<T>(value: T): asserts value is NonNullable<T> {
 }
 
 beforeEach(async () => {
-  const dbModule = await import('@/db')
-  dbModule._resetDb()
-  await dbModule._clearAll()
+  const { getDb } = await import('@/db')
+  const db = await getDb()
+  const stores = Array.from(db.objectStoreNames)
+  const tx = db.transaction(stores, 'readwrite')
+  for (const store of stores) {
+    tx.objectStore(store).clear()
+  }
+  await tx.done
 })
 
 async function useTasksFresh() {
