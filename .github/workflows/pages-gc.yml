@@ -1,0 +1,34 @@
+name: Pages GC
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-publish
+  cancel-in-progress: false
+
+jobs:
+  gc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Remove PR preview from gh-pages
+        env:
+          TARGET: pr-${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          git clone --branch gh-pages --depth 1 "https://github.com/${{ github.repository }}.git" gh-pages-out
+          cd gh-pages-out
+          if [ -d "$TARGET" ]; then
+            rm -rf "$TARGET"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -A
+            git commit -m "GC $TARGET (PR #${{ github.event.pull_request.number }} closed)"
+            git push origin gh-pages
+          else
+            echo "Directory $TARGET not found, nothing to do."
+          fi
