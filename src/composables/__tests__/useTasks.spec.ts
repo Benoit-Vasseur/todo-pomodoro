@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { useTasks } from '@/composables/useTasks'
+import { getDb } from '@/db'
 
 function assertDefined<T>(value: T): asserts value is NonNullable<T> {
   expect(value).toBeDefined()
 }
 
 beforeEach(async () => {
-  const { getDb } = await import('@/db')
   const db = await getDb()
   const stores = Array.from(db.objectStoreNames)
   const tx = db.transaction(stores, 'readwrite')
@@ -15,14 +16,9 @@ beforeEach(async () => {
   await tx.done
 })
 
-async function useTasksFresh() {
-  const m = await import('@/composables/useTasks')
-  return m.useTasks()
-}
-
 describe('useTasks', () => {
   it('ajoute une tâche et la retourne dans la liste', async () => {
-    const { addTask, loadTasks, tasks } = await useTasksFresh()
+    const { addTask, loadTasks, tasks } = useTasks()
 
     await addTask('Faire les courses')
     await loadTasks()
@@ -35,7 +31,7 @@ describe('useTasks', () => {
   })
 
   it('bascule le statut done', async () => {
-    const { addTask, toggleTask, loadTasks, tasks } = await useTasksFresh()
+    const { addTask, toggleTask, loadTasks, tasks } = useTasks()
 
     await addTask('Apprendre Vitest')
     await loadTasks()
@@ -52,7 +48,7 @@ describe('useTasks', () => {
   })
 
   it('supprime une tâche', async () => {
-    const { addTask, removeTask, loadTasks, tasks } = await useTasksFresh()
+    const { addTask, removeTask, loadTasks, tasks } = useTasks()
 
     await addTask('À supprimer')
     await loadTasks()
@@ -67,7 +63,7 @@ describe('useTasks', () => {
   })
 
   it('retourne les tâches triées par date de création', async () => {
-    const { addTask, loadTasks, tasks } = await useTasksFresh()
+    const { addTask, loadTasks, tasks } = useTasks()
 
     await addTask('Première')
     await addTask('Deuxième')
