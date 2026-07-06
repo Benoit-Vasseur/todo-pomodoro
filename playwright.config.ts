@@ -1,6 +1,8 @@
 import process from 'node:process'
 import { defineConfig, devices } from '@playwright/test'
 
+const COVERAGE_E2E = !!process.env.COVERAGE_E2E
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -22,7 +24,15 @@ export default defineConfig({
   /* Opt out of parallel tests on CI. */
   workers: process.env.CI ? 1 : undefined,
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
-  reporter: 'html',
+  reporter: COVERAGE_E2E
+    ? [
+        ['html'],
+        // Reporter custom qui agrège la coverage E2E dans `coverage-e2e/`.
+        [
+          new URL('./e2e/reporters/coverage-reporter.mjs', import.meta.url).pathname,
+        ],
+      ]
+    : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Maximum time each action such as `click()` can take. Defaults to 0 (no limit). */
@@ -81,10 +91,12 @@ export default defineConfig({
     /**
      * Use the dev server by default for faster feedback loop.
      * Use the preview server on CI for more realistic testing.
+     * When COVERAGE_E2E=1, force the preview server (build instrumenté) regardless of CI.
      * Playwright will re-use the local server if there is already a dev-server running.
      */
-    command: process.env.CI ? 'pnpm run preview' : 'pnpm run dev',
-    port: process.env.CI ? 4173 : 5173,
-    reuseExistingServer: !process.env.CI,
+    command:
+      process.env.CI || COVERAGE_E2E ? 'pnpm run preview' : 'pnpm run dev',
+    port: process.env.CI || COVERAGE_E2E ? 4173 : 5173,
+    reuseExistingServer: !process.env.CI && !COVERAGE_E2E,
   },
 })

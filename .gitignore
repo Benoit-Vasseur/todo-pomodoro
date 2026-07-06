@@ -36,3 +36,9 @@ __screenshots__/
 
 test-results/
 playwright-report/
+
+# Coverage reports (gérés via artifacts CI — jamais commités)
+coverage
+coverage-e2e
+base-coverage
+.coverage-e2e-cache

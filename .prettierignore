@@ -1,3 +1,7 @@
 .agents
 pnpm-lock.yaml
 node-modules
+coverage
+coverage-e2e
+base-coverage
+.coverage-e2e-cache
