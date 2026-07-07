@@ -9,6 +9,9 @@ export interface Task {
   createdAt: Date
 }
 
+/** Champs d'une tâche modifiables par l'utilisateur (édition). */
+export type TaskPatch = Partial<Pick<Task, 'title' | 'description'>>
+
 const DB_NAME = 'pomodoro-backlog'
 const DB_VERSION = 2
 

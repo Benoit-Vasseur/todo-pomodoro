@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { getDb, type Task } from '@/db'
+import { getDb, type Task, type TaskPatch } from '@/db'
 
 export function useTasks() {
   const tasks: Ref<Task[]> = ref([])
@@ -17,8 +17,10 @@ export function useTasks() {
 
   async function addTask(title: string, description?: string) {
     const db = await getDb()
-    const all = await db.getAllFromIndex('tasks', 'by_order')
-    const order = all.length
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    // max+1 plutôt que length : après suppressions, length peut entrer en
+    // collision avec un ordre existant (trous dans la séquence).
+    const order = all.reduce((max, t) => Math.max(max, t.order), -1) + 1
     const id = await db.add('tasks', {
       title,
       description,
@@ -41,10 +43,7 @@ export function useTasks() {
     if (idx !== -1) tasks.value[idx] = task
   }
 
-  async function updateTask(
-    id: number,
-    patch: Partial<Pick<Task, 'title' | 'description'>>,
-  ) {
+  async function updateTask(id: number, patch: TaskPatch) {
     const db = await getDb()
     const task = await db.get('tasks', id)
     if (!task) return
@@ -71,7 +70,11 @@ export function useTasks() {
     if (!dragged) return
     const toIdx = all.findIndex((t) => t.id === targetId)
     if (toIdx === -1) return
-    all.splice(toIdx, 0, dragged)
+    // Sémantique « déposer sur la cible » : l'élément prend la place de la
+    // cible — inséré avant si on remonte, après si on descend (permet
+    // d'atteindre la dernière position).
+    const insertAt = fromIdx <= toIdx ? toIdx + 1 : toIdx
+    all.splice(insertAt, 0, dragged)
     const reordered = all.map((task, index) => ({ ...task, order: index }))
     const tx = db.transaction('tasks', 'readwrite')
     await Promise.all(

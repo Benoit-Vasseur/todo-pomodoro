@@ -141,4 +141,47 @@ describe('useTasks', () => {
     expect(tasks.value.map((t) => t.title)).toEqual(['C', 'A', 'B'])
     expect(tasks.value.map((t) => t.order)).toEqual([0, 1, 2])
   })
+
+  it('déplace une tâche vers le bas (dernière position)', async () => {
+    const { addTask, reorderTask, loadTasks, tasks } = useTasks()
+
+    await addTask('A')
+    await addTask('B')
+    await addTask('C')
+    await loadTasks()
+
+    // On glisse A sur C : A doit passer après C (dernière position).
+    const a = tasks.value[0]
+    const c = tasks.value[2]
+    assertDefined(a)
+    assertDefined(c)
+    assertDefined(a.id)
+    assertDefined(c.id)
+    await reorderTask(a.id, c.id)
+    await loadTasks()
+
+    expect(tasks.value.map((t) => t.title)).toEqual(['B', 'C', 'A'])
+  })
+
+  it("n'entre pas en collision d'ordre après une suppression", async () => {
+    const { addTask, removeTask, loadTasks, tasks } = useTasks()
+
+    await addTask('A')
+    await addTask('B')
+    await addTask('C')
+    await loadTasks()
+
+    const b = tasks.value[1]
+    assertDefined(b)
+    assertDefined(b.id)
+    await removeTask(b.id) // reste A(order 0), C(order 2)
+
+    await addTask('D') // doit obtenir order 3 (max+1), pas 2
+    await loadTasks()
+
+    expect(tasks.value.map((t) => t.title)).toEqual(['A', 'C', 'D'])
+    const d = tasks.value[2]
+    assertDefined(d)
+    expect(d.order).toBe(3)
+  })
 })

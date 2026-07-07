@@ -2,12 +2,14 @@
 import { ref, useId } from 'vue'
 import { GripVertical } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
-import type { Task } from '@/db'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import type { Task, TaskPatch } from '@/db'
 
 const props = defineProps<{ task: Task }>()
 const emit = defineEmits<{
   toggle: []
-  update: [patch: { title: string; description?: string }]
+  update: [patch: TaskPatch]
   delete: []
   dragStarted: [id: number]
   dropped: [targetId: number]
@@ -112,23 +114,18 @@ function onDrop(event: DragEvent) {
     <form v-else class="flex-1 space-y-2" @submit.prevent="save">
       <div class="space-y-1">
         <label :for="titleId" class="text-sm font-medium">Modifier le titre</label>
-        <input
+        <Input
           :id="titleId"
           v-model="draftTitle"
           type="text"
           required
-          class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         />
       </div>
       <div class="space-y-1">
         <label :for="descriptionId" class="text-sm font-medium"
           >Modifier la description</label
         >
-        <textarea
-          :id="descriptionId"
-          v-model="draftDescription"
-          class="flex min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
+        <Textarea :id="descriptionId" v-model="draftDescription" />
       </div>
       <div class="flex gap-1">
         <Button type="submit" size="sm">Enregistrer</Button>

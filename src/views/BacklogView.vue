@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import TaskItem from '@/components/TaskItem.vue'
 import { useTasks } from '@/composables/useTasks'
-import type { Task } from '@/db'
+import type { Task, TaskPatch } from '@/db'
 
 const {
   tasks,
@@ -33,10 +35,7 @@ async function toggle(task: Task) {
   await toggleTask(task.id)
 }
 
-async function update(
-  task: Task,
-  patch: { title: string; description?: string },
-) {
+async function update(task: Task, patch: TaskPatch) {
   if (task.id === undefined) return
   await updateTask(task.id, patch)
 }
@@ -67,23 +66,11 @@ onMounted(loadTasks)
     <form class="mt-4 space-y-3" @submit.prevent="onSubmit">
       <div class="space-y-1">
         <label for="title" class="text-sm font-medium">Titre</label>
-        <input
-          id="title"
-          v-model="title"
-          name="title"
-          type="text"
-          required
-          class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
+        <Input id="title" v-model="title" name="title" type="text" required />
       </div>
       <div class="space-y-1">
         <label for="description" class="text-sm font-medium">Description</label>
-        <textarea
-          id="description"
-          v-model="description"
-          name="description"
-          class="flex min-h-16 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        />
+        <Textarea id="description" v-model="description" name="description" />
       </div>
       <Button type="submit">Ajouter</Button>
     </form>
