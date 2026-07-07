@@ -12,6 +12,21 @@ export default defineConfig({
     },
   },
   test: {
+    // Coverage agrégée pour les projets unit + component.
+    // Héritée par chaque project via `extends: true`.
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary', 'lcov', 'html', 'json-summary'],
+      reportsDirectory: fileURLToPath(new URL('./coverage', import.meta.url)),
+      include: ['src/**/*.{ts,vue}'],
+      exclude: [
+        'src/**/__tests__/**',
+        'src/**/*.spec.ts',
+        'src/**/*.d.ts',
+        'src/main.ts',
+        'src/router/index.ts',
+      ],
+    },
     projects: [
       {
         extends: true,

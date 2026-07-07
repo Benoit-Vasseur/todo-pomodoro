@@ -33,3 +33,80 @@ jobs:
       - run: pnpm test:e2e
         env:
           CI: true
+
+  coverage:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm exec playwright install --with-deps
+
+      # Coverage Vitest (unit + component fusionnée).
+      - run: pnpm test:coverage
+
+      # Coverage E2E séparée (build instrumenté via COVERAGE_E2E=1).
+      - run: pnpm test:e2e:coverage
+        env:
+          CI: true
+
+      # Artefacts HTML (conservation courte : 7 jours).
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 7
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-e2e-report
+          path: coverage-e2e/
+          retention-days: 7
+
+      # Sur PR : calcule le delta vs le merge-base pour la coverage Vitest.
+      - name: Base coverage (delta vs merge-base)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        run: |
+          BASE_SHA=$(git merge-base origin/"$GITHUB_BASE_REF" HEAD)
+          echo "Merge-base: $BASE_SHA"
+          git worktree add ../base "$BASE_SHA"
+          (cd ../base && pnpm install --frozen-lockfile && pnpm test:coverage)
+          mkdir -p base-coverage
+          cp -r ../base/coverage/* base-coverage/
+        env:
+          CI: 'true'
+
+      - name: Build coverage comment
+        run: |
+          node scripts/coverage-comment.mjs > coverage-comment.md
+          cat coverage-comment.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Publish coverage comment
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: coverage
+          path: coverage-comment.md
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: base-coverage
+          path: base-coverage/
+          retention-days: 7
