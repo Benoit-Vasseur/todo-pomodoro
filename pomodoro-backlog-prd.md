@@ -18,10 +18,9 @@ Usage mono-utilisateur. Offline-first à terme ; dans un premier temps SPA sans 
 
 ### 2.2 Sous-tâches
 
-Deux types :
+Un seul type en v1 : la **sous-tâche noble** — tâche à part entière avec un `parentId`. Possède titre, description, ordre, statut, compteur de pomodoros. Ne peut pas avoir elle-même de sous-tâche. Un pomodoro sur une sous-tâche incrémente son compteur ET celui du parent.
 
-- **Checklist décorative** : liste à plat simple, sans vie propre, sans compteur
-- **Sous-tâche noble** : tâche à part entière avec un `parentId`. Possède titre, description, ordre, statut, compteur de pomodoros. Ne peut pas avoir elle-même de sous-tâche. Un pomodoro sur une sous-tâche incrémente son compteur ET celui du parent.
+> La « checklist décorative » évoquée dans les premières drafts est droppée de la v1 (ADR #0005). Une liste à tirets dans le champ `description` couvre le besoin léger ; les nobles couvrent le besoin structurel.
 
 ### 2.3 Sessions Pomodoro
 
@@ -78,9 +77,6 @@ Chaque récurrente a une configuration :
 Tâche
   id, parentId (optionnel), title, description, order, status,
   pomodoroCount, createdAt
-
-Sous-tâche décorative
-  id, taskId, title, checked (bool), order
 
 Tâche récurrente
   id, title, category (bien-etre | a-la-carte),
