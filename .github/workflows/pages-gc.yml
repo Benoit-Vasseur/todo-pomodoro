@@ -18,9 +18,11 @@ jobs:
       - name: Remove PR preview from gh-pages
         env:
           TARGET: pr-${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          git clone --branch gh-pages --depth 1 "https://github.com/${{ github.repository }}.git" gh-pages-out
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git clone --branch gh-pages --depth 1 "$REPO_URL" gh-pages-out
           cd gh-pages-out
           if [ -d "$TARGET" ]; then
             rm -rf "$TARGET"
