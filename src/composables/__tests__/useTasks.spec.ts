@@ -62,13 +62,40 @@ describe('useTasks', () => {
     expect(tasks.value).toHaveLength(0)
   })
 
-  it('retourne les tâches triées par date de création', async () => {
+  it('assigne un ordre croissant et liste les tâches par ordre', async () => {
     const { addTask, loadTasks, tasks } = useTasks()
 
     await addTask('Première')
     await addTask('Deuxième')
+    await addTask('Troisième')
     await loadTasks()
 
-    expect(tasks.value.map((t) => t.title)).toEqual(['Première', 'Deuxième'])
+    expect(tasks.value.map((t) => t.title)).toEqual([
+      'Première',
+      'Deuxième',
+      'Troisième',
+    ])
+    expect(tasks.value.map((t) => t.order)).toEqual([0, 1, 2])
+  })
+
+  it('persiste la description optionnelle', async () => {
+    const { addTask, loadTasks, tasks } = useTasks()
+
+    await addTask('Avec description', 'Détails importants')
+    await loadTasks()
+
+    const task = tasks.value[0]
+    assertDefined(task)
+    expect(task.description).toBe('Détails importants')
+  })
+
+  it('persiste les tâches entre deux instances du composable', async () => {
+    const first = useTasks()
+    await first.addTask('Persistée')
+
+    const second = useTasks()
+    await second.loadTasks()
+
+    expect(second.tasks.value.map((t) => t.title)).toEqual(['Persistée'])
   })
 })

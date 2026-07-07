@@ -9,17 +9,21 @@ export function useTasks() {
     loading.value = true
     try {
       const db = await getDb()
-      tasks.value = await db.getAllFromIndex('tasks', 'by_created')
+      tasks.value = await db.getAllFromIndex('tasks', 'by_order')
     } finally {
       loading.value = false
     }
   }
 
-  async function addTask(title: string) {
+  async function addTask(title: string, description?: string) {
     const db = await getDb()
+    const all = await db.getAllFromIndex('tasks', 'by_order')
+    const order = all.length
     const id = await db.add('tasks', {
       title,
+      description,
       done: false,
+      order,
       createdAt: new Date(),
     })
     const task = await db.get('tasks', id)
