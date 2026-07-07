@@ -41,11 +41,24 @@ export function useTasks() {
     if (idx !== -1) tasks.value[idx] = task
   }
 
+  async function updateTask(
+    id: number,
+    patch: Partial<Pick<Task, 'title' | 'description'>>,
+  ) {
+    const db = await getDb()
+    const task = await db.get('tasks', id)
+    if (!task) return
+    const updated = { ...task, ...patch }
+    await db.put('tasks', updated)
+    const idx = tasks.value.findIndex((t) => t.id === id)
+    if (idx !== -1) tasks.value[idx] = updated
+  }
+
   async function removeTask(id: number) {
     const db = await getDb()
     await db.delete('tasks', id)
     tasks.value = tasks.value.filter((t) => t.id !== id)
   }
 
-  return { tasks, loading, loadTasks, addTask, toggleTask, removeTask }
+  return { tasks, loading, loadTasks, addTask, toggleTask, updateTask, removeTask }
 }

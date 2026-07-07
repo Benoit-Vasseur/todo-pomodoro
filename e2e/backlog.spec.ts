@@ -21,14 +21,18 @@ test('parcours complet CRUD backlog avec persistance', async ({ page }) => {
   await page.getByRole('button', { name: 'Ajouter' }).click()
 
   // Lister : la tâche apparaît dans le backlog.
-  await expect(page.getByText('Écrire un brief')).toBeVisible()
-  await expect(page.getByText('Définir le périmètre')).toBeVisible()
+  await expect(page.getByText('Écrire un brief', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('Définir le périmètre', { exact: true }),
+  ).toBeVisible()
   await expect(page.getByText('Le backlog est vide.')).toBeHidden()
 
   // Persistance IndexedDB : la tâche survit à un reload.
   await page.reload()
-  await expect(page.getByText('Écrire un brief')).toBeVisible()
-  await expect(page.getByText('Définir le périmètre')).toBeVisible()
+  await expect(page.getByText('Écrire un brief', { exact: true })).toBeVisible()
+  await expect(
+    page.getByText('Définir le périmètre', { exact: true }),
+  ).toBeVisible()
 
   // Éditer la tâche (titre + description).
   await page.getByRole('button', { name: /Éditer/ }).click()
@@ -40,9 +44,13 @@ test('parcours complet CRUD backlog avec persistance', async ({ page }) => {
     .fill('Périmètre et user stories')
   await page.getByRole('button', { name: 'Enregistrer' }).click()
 
-  await expect(page.getByText('Écrire un brief complet')).toBeVisible()
-  await expect(page.getByText('Périmètre et user stories')).toBeVisible()
-  await expect(page.getByText('Écrire un brief')).toBeHidden()
+  await expect(
+    page.getByText('Écrire un brief complet', { exact: true }),
+  ).toBeVisible()
+  await expect(
+    page.getByText('Périmètre et user stories', { exact: true }),
+  ).toBeVisible()
+  await expect(page.getByText('Écrire un brief', { exact: true })).toBeHidden()
 
   // Marquer comme terminée.
   const checkbox = page.getByRole('checkbox', { name: /Écrire un brief complet/ })

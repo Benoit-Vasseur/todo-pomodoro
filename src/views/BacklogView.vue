@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
+import TaskItem from '@/components/TaskItem.vue'
 import { useTasks } from '@/composables/useTasks'
 import type { Task } from '@/db'
 
-const { tasks, loading, loadTasks, addTask, toggleTask } = useTasks()
+const { tasks, loading, loadTasks, addTask, toggleTask, updateTask } = useTasks()
 
 const title = ref('')
 const description = ref('')
@@ -20,6 +21,14 @@ async function onSubmit() {
 async function toggle(task: Task) {
   if (task.id === undefined) return
   await toggleTask(task.id)
+}
+
+async function update(
+  task: Task,
+  patch: { title: string; description?: string },
+) {
+  if (task.id === undefined) return
+  await updateTask(task.id, patch)
 }
 
 onMounted(loadTasks)
@@ -60,30 +69,13 @@ onMounted(loadTasks)
     </p>
 
     <ul v-else class="mt-6 space-y-2">
-      <li
+      <TaskItem
         v-for="task in tasks"
         :key="task.id"
-        class="flex items-start gap-3 rounded-md border border-border bg-card p-3"
-      >
-        <input
-          type="checkbox"
-          class="mt-1 size-4"
-          :checked="task.done"
-          :aria-label="`${task.done ? 'Réactiver' : 'Terminer'} « ${task.title} »`"
-          @change="toggle(task)"
-        />
-        <div class="flex-1">
-          <p
-            class="font-medium"
-            :class="{ 'text-muted-foreground line-through': task.done }"
-          >
-            {{ task.title }}
-          </p>
-          <p v-if="task.description" class="text-sm text-muted-foreground">
-            {{ task.description }}
-          </p>
-        </div>
-      </li>
+        :task="task"
+        @toggle="toggle(task)"
+        @update="(patch) => update(task, patch)"
+      />
     </ul>
   </main>
 </template>

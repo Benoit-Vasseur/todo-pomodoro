@@ -98,4 +98,25 @@ describe('useTasks', () => {
 
     expect(second.tasks.value.map((t) => t.title)).toEqual(['Persistée'])
   })
+
+  it('met à jour une tâche et persiste le résultat', async () => {
+    const { addTask, updateTask, loadTasks, tasks } = useTasks()
+
+    await addTask('Titre initial', 'Desc initiale')
+    await loadTasks()
+
+    const task = tasks.value[0]
+    assertDefined(task)
+    assertDefined(task.id)
+    await updateTask(task.id, {
+      title: 'Titre édité',
+      description: 'Desc éditée',
+    })
+    await loadTasks()
+
+    const updated = tasks.value[0]
+    assertDefined(updated)
+    expect(updated.title).toBe('Titre édité')
+    expect(updated.description).toBe('Desc éditée')
+  })
 })
