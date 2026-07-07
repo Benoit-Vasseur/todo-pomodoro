@@ -60,5 +60,28 @@ export function useTasks() {
     tasks.value = tasks.value.filter((t) => t.id !== id)
   }
 
-  return { tasks, loading, loadTasks, addTask, toggleTask, updateTask, removeTask }
+  async function reorderTask(draggedId: number, targetId: number) {
+    if (draggedId === targetId) return
+    const db = await getDb()
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    const fromIdx = all.findIndex((t) => t.id === draggedId)
+    if (fromIdx === -1) return
+    const removed = all.splice(fromIdx, 1)
+    const dragged = removed[0]
+    if (!dragged) return
+    const toIdx = all.findIndex((t) => t.id === targetId)
+    if (toIdx === -1) return
+    all.splice(toIdx, 0, dragged)
+    const reordered = all.map((task, index) => ({ ...task, order: index }))
+    const tx = db.transaction('tasks', 'readwrite')
+    await Promise.all(
+      reordered
+        .filter((t) => t.id !== undefined)
+        .map((t) => tx.store.put(t)),
+    )
+    await tx.done
+    tasks.value = reordered
+  }
+
+  return { tasks, loading, loadTasks, addTask, toggleTask, updateTask, removeTask, reorderTask }
 }

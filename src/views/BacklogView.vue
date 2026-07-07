@@ -13,6 +13,7 @@ const {
   toggleTask,
   updateTask,
   removeTask,
+  reorderTask,
 } = useTasks()
 
 const title = ref('')
@@ -42,6 +43,10 @@ async function update(
 async function remove(task: Task) {
   if (task.id === undefined) return
   await removeTask(task.id)
+}
+
+async function reorder(payload: { draggedId: number; targetId: number }) {
+  await reorderTask(payload.draggedId, payload.targetId)
 }
 
 onMounted(loadTasks)
@@ -89,6 +94,7 @@ onMounted(loadTasks)
         @toggle="toggle(task)"
         @update="(patch) => update(task, patch)"
         @delete="remove(task)"
+        @reorder="reorder"
       />
     </ul>
   </main>

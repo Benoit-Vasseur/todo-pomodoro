@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, useId } from 'vue'
+import { GripVertical } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import type { Task } from '@/db'
 
@@ -8,6 +9,7 @@ const emit = defineEmits<{
   toggle: []
   update: [patch: { title: string; description?: string }]
   delete: []
+  reorder: [payload: { draggedId: number; targetId: number }]
 }>()
 
 const editing = ref(false)
@@ -36,13 +38,45 @@ function save() {
   })
   editing.value = false
 }
+
+function onDragStart(event: DragEvent) {
+  if (props.task.id === undefined || event.dataTransfer === null) return
+  event.dataTransfer.setData('text/plain', String(props.task.id))
+  event.dataTransfer.effectAllowed = 'move'
+}
+
+function onDrop(event: DragEvent) {
+  event.preventDefault()
+  const raw = event.dataTransfer?.getData('text/plain')
+  const draggedId = Number(raw)
+  if (
+    !draggedId ||
+    Number.isNaN(draggedId) ||
+    props.task.id === undefined ||
+    draggedId === props.task.id
+  ) {
+    return
+  }
+  emit('reorder', { draggedId, targetId: props.task.id })
+}
 </script>
 
 <template>
   <li
     class="flex items-start gap-3 rounded-md border border-border bg-card p-3"
+    @dragover.prevent
+    @drop="onDrop"
   >
     <template v-if="!editing">
+      <span
+        data-testid="drag-handle"
+        draggable="true"
+        aria-hidden="true"
+        class="mt-1 cursor-grab text-muted-foreground"
+        @dragstart="onDragStart"
+      >
+        <GripVertical class="size-4" />
+      </span>
       <input
         type="checkbox"
         class="mt-1 size-4"

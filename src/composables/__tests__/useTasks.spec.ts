@@ -119,4 +119,26 @@ describe('useTasks', () => {
     expect(updated.title).toBe('Titre édité')
     expect(updated.description).toBe('Desc éditée')
   })
+
+  it('réordonne les tâches et persiste le nouvel ordre', async () => {
+    const { addTask, reorderTask, loadTasks, tasks } = useTasks()
+
+    await addTask('A')
+    await addTask('B')
+    await addTask('C')
+    await loadTasks()
+
+    // Ordre initial : A, B, C. On glisse C avant A.
+    const a = tasks.value[0]
+    const c = tasks.value[2]
+    assertDefined(a)
+    assertDefined(c)
+    assertDefined(a.id)
+    assertDefined(c.id)
+    await reorderTask(c.id, a.id)
+    await loadTasks()
+
+    expect(tasks.value.map((t) => t.title)).toEqual(['C', 'A', 'B'])
+    expect(tasks.value.map((t) => t.order)).toEqual([0, 1, 2])
+  })
 })
