@@ -18,6 +18,7 @@ const {
 
 const title = ref('')
 const description = ref('')
+const draggedId = ref<number | null>(null)
 
 async function onSubmit() {
   const trimmed = title.value.trim()
@@ -45,8 +46,15 @@ async function remove(task: Task) {
   await removeTask(task.id)
 }
 
-async function reorder(payload: { draggedId: number; targetId: number }) {
-  await reorderTask(payload.draggedId, payload.targetId)
+function onDragStarted(id: number) {
+  draggedId.value = id
+}
+
+async function onDropped(targetId: number) {
+  const from = draggedId.value
+  draggedId.value = null
+  if (from === null || from === targetId) return
+  await reorderTask(from, targetId)
 }
 
 onMounted(loadTasks)
@@ -94,7 +102,8 @@ onMounted(loadTasks)
         @toggle="toggle(task)"
         @update="(patch) => update(task, patch)"
         @delete="remove(task)"
-        @reorder="reorder"
+        @drag-started="onDragStarted"
+        @dropped="onDropped"
       />
     </ul>
   </main>

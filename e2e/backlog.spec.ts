@@ -68,20 +68,28 @@ test('réordonne les tâches par drag & drop', async ({ page }) => {
 
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche A')
   await page.getByRole('button', { name: 'Ajouter' }).click()
+  // On attend que le formulaire soit réinitialisé avant de saisir la suivante
+  // (addTask est asynchrone : sans cela, la 2e saisie peut écraser le reset).
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
+
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche B')
   await page.getByRole('button', { name: 'Ajouter' }).click()
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
 
   // Ordre initial : A puis B.
   await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche A')
   await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche B')
 
-  // Glisser B au-dessus de A.
+  // Glisser B au-dessus de A (HTML5 DnD — on délègue les événements
+  // dragstart/dragover/drop pour la fiabilité headless cross-browser).
   const itemA = page.getByRole('listitem').filter({ hasText: 'Tâche A' })
   const handleB = page
     .getByRole('listitem')
     .filter({ hasText: 'Tâche B' })
     .getByTestId('drag-handle')
-  await handleB.dragTo(itemA)
+  await handleB.dispatchEvent('dragstart')
+  await itemA.dispatchEvent('dragover')
+  await itemA.dispatchEvent('drop')
 
   // Nouvel ordre : B puis A.
   await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche B')

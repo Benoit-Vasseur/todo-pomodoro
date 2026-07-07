@@ -9,7 +9,8 @@ const emit = defineEmits<{
   toggle: []
   update: [patch: { title: string; description?: string }]
   delete: []
-  reorder: [payload: { draggedId: number; targetId: number }]
+  dragStarted: [id: number]
+  dropped: [targetId: number]
 }>()
 
 const editing = ref(false)
@@ -40,24 +41,19 @@ function save() {
 }
 
 function onDragStart(event: DragEvent) {
-  if (props.task.id === undefined || event.dataTransfer === null) return
-  event.dataTransfer.setData('text/plain', String(props.task.id))
-  event.dataTransfer.effectAllowed = 'move'
+  if (props.task.id === undefined) return
+  emit('dragStarted', props.task.id)
+  // dataTransfer uniquement pour le drag natif réel (image de glisse).
+  if (event.dataTransfer) {
+    event.dataTransfer.setData('text/plain', String(props.task.id))
+    event.dataTransfer.effectAllowed = 'move'
+  }
 }
 
 function onDrop(event: DragEvent) {
   event.preventDefault()
-  const raw = event.dataTransfer?.getData('text/plain')
-  const draggedId = Number(raw)
-  if (
-    !draggedId ||
-    Number.isNaN(draggedId) ||
-    props.task.id === undefined ||
-    draggedId === props.task.id
-  ) {
-    return
-  }
-  emit('reorder', { draggedId, targetId: props.task.id })
+  if (props.task.id === undefined) return
+  emit('dropped', props.task.id)
 }
 </script>
 
