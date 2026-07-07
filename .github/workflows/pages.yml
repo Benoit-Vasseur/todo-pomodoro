@@ -1,0 +1,71 @@
+name: Pages
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gh-pages-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Determine publish target
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "dir=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "dir=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - run: pnpm build
+
+      - name: Publish to gh-pages
+        env:
+          TARGET: ${{ steps.target.outputs.dir }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
+          git clone --branch gh-pages --depth 1 "$REPO_URL" gh-pages-out || {
+            mkdir -p gh-pages-out
+            cd gh-pages-out
+            git init
+            git checkout -b gh-pages
+            git remote add origin "$REPO_URL"
+          }
+
+          cd gh-pages-out
+          rm -rf "$TARGET"
+          mkdir -p "$TARGET"
+          cp -a ../dist/. "$TARGET/"
+
+          # Minimal root index so the Pages site root isn't a 404.
+          if [ ! -f index.html ]; then
+            printf '<!doctype html><html><head><meta charset="utf-8"><title>todo-pomodoro previews</title></head><body><p>See <a href="main/">main</a>.</p></body></html>' > index.html
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Publish $TARGET @ ${{ github.sha }}" || echo "No changes to commit"
+          git push origin gh-pages

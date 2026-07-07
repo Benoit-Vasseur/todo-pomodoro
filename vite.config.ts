@@ -13,6 +13,7 @@ export default defineConfig(() => {
   const instrumentForE2E = !!process.env.COVERAGE_E2E
 
   return {
+    base: './',
     plugins: [
       vue(),
       vueJsx(),
