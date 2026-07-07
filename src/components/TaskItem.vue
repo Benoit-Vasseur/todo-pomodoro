@@ -69,6 +69,13 @@ function save() {
           @click="startEdit"
           >Éditer</Button
         >
+        <Button
+          variant="destructive"
+          size="sm"
+          :aria-label="`Supprimer « ${task.title} »`"
+          @click="emit('delete')"
+          >Supprimer</Button
+        >
       </div>
     </template>
 

@@ -5,7 +5,15 @@ import TaskItem from '@/components/TaskItem.vue'
 import { useTasks } from '@/composables/useTasks'
 import type { Task } from '@/db'
 
-const { tasks, loading, loadTasks, addTask, toggleTask, updateTask } = useTasks()
+const {
+  tasks,
+  loading,
+  loadTasks,
+  addTask,
+  toggleTask,
+  updateTask,
+  removeTask,
+} = useTasks()
 
 const title = ref('')
 const description = ref('')
@@ -29,6 +37,11 @@ async function update(
 ) {
   if (task.id === undefined) return
   await updateTask(task.id, patch)
+}
+
+async function remove(task: Task) {
+  if (task.id === undefined) return
+  await removeTask(task.id)
 }
 
 onMounted(loadTasks)
@@ -75,6 +88,7 @@ onMounted(loadTasks)
         :task="task"
         @toggle="toggle(task)"
         @update="(patch) => update(task, patch)"
+        @delete="remove(task)"
       />
     </ul>
   </main>
