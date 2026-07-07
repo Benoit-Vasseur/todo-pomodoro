@@ -1,0 +1,86 @@
+import { test, expect } from './fixtures'
+
+// Parcours complet du backlog : couvre l'ensemble des tâches de l'issue #2
+// (créer, lister, éditer, supprimer, marquer terminée, persistance, drag & drop).
+// Écrit avant l'implémentation — vert à la fin de toutes les tâches.
+
+test('parcours complet CRUD backlog avec persistance', async ({ page }) => {
+  await page.goto('/')
+
+  // Le backlog est l'écran central.
+  await expect(page.getByRole('heading', { name: 'Backlog' })).toBeVisible()
+
+  // État initial : backlog vide.
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Créer une tâche (titre + description optionnelle).
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Écrire un brief')
+  await page
+    .getByRole('textbox', { name: 'Description' })
+    .fill('Définir le périmètre')
+  await page.getByRole('button', { name: 'Ajouter' }).click()
+
+  // Lister : la tâche apparaît dans le backlog.
+  await expect(page.getByText('Écrire un brief')).toBeVisible()
+  await expect(page.getByText('Définir le périmètre')).toBeVisible()
+  await expect(page.getByText('Le backlog est vide.')).toBeHidden()
+
+  // Persistance IndexedDB : la tâche survit à un reload.
+  await page.reload()
+  await expect(page.getByText('Écrire un brief')).toBeVisible()
+  await expect(page.getByText('Définir le périmètre')).toBeVisible()
+
+  // Éditer la tâche (titre + description).
+  await page.getByRole('button', { name: /Éditer/ }).click()
+  await page
+    .getByRole('textbox', { name: 'Modifier le titre' })
+    .fill('Écrire un brief complet')
+  await page
+    .getByRole('textbox', { name: 'Modifier la description' })
+    .fill('Périmètre et user stories')
+  await page.getByRole('button', { name: 'Enregistrer' }).click()
+
+  await expect(page.getByText('Écrire un brief complet')).toBeVisible()
+  await expect(page.getByText('Périmètre et user stories')).toBeVisible()
+  await expect(page.getByText('Écrire un brief')).toBeHidden()
+
+  // Marquer comme terminée.
+  const checkbox = page.getByRole('checkbox', { name: /Écrire un brief complet/ })
+  await checkbox.check()
+  await expect(checkbox).toBeChecked()
+
+  // Supprimer la tâche.
+  await page.getByRole('button', { name: /Supprimer/ }).click()
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+})
+
+test('réordonne les tâches par drag & drop', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche A')
+  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche B')
+  await page.getByRole('button', { name: 'Ajouter' }).click()
+
+  // Ordre initial : A puis B.
+  await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche A')
+  await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche B')
+
+  // Glisser B au-dessus de A.
+  const itemA = page.getByRole('listitem').filter({ hasText: 'Tâche A' })
+  const handleB = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Tâche B' })
+    .getByTestId('drag-handle')
+  await handleB.dragTo(itemA)
+
+  // Nouvel ordre : B puis A.
+  await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche B')
+  await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche A')
+
+  // L'ordre persiste après reload.
+  await page.reload()
+  await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche B')
+  await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche A')
+})
