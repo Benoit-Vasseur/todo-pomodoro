@@ -56,13 +56,11 @@ jobs:
 
           cd gh-pages-out
           rm -rf "$TARGET"
-          mkdir -p "$TARGET"
-          cp -a ../dist/. "$TARGET/"
+          mkdir -p "$TARGET/app"
+          cp -a ../dist/. "$TARGET/app/"
 
-          # Minimal root index so the Pages site root isn't a 404.
-          if [ ! -f index.html ]; then
-            printf '<!doctype html><html><head><meta charset="utf-8"><title>todo-pomodoro previews</title></head><body><p>See <a href="main/">main</a>.</p></body></html>' > index.html
-          fi
+          # Root index: hub pointing at the production preview app.
+          printf '<!doctype html><html><head><meta charset="utf-8"><title>todo-pomodoro previews</title></head><body><p>See <a href="main/app/">main</a>.</p></body></html>' > index.html
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
