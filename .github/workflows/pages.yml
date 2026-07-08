@@ -87,13 +87,13 @@ jobs:
       actions: read
       pull-requests: write
     steps:
+      - uses: actions/checkout@v4
+
       - name: Download CI artifacts
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ needs.wait-ci.outputs.run-id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - uses: actions/checkout@v4
 
       - name: Publish to gh-pages
         env:
