@@ -12,6 +12,9 @@ export default defineConfig({
     },
   },
   test: {
+    reporters: process.env.CI
+      ? ['default', ['html', { outputFile: 'vitest-html/index.html' }]]
+      : ['default'],
     // Coverage agrégée pour les projets unit + component.
     // Héritée par chaque project via `extends: true`.
     coverage: {
