@@ -14,6 +14,7 @@ const {
   addTask,
   addSubTask,
   toggleTask,
+  startTask,
   updateTask,
   removeTask,
   reorderTask,
@@ -22,6 +23,7 @@ const {
 const title = ref('')
 const description = ref('')
 const draggedId = ref<number | null>(null)
+const statusError = ref<string | null>(null)
 
 interface DisplayRow {
   task: Task
@@ -57,7 +59,23 @@ async function onSubmit() {
 
 async function toggle(task: Task) {
   if (task.id === undefined) return
-  await toggleTask(task.id)
+  statusError.value = null
+  try {
+    await toggleTask(task.id)
+  } catch (e) {
+    statusError.value = e instanceof Error ? e.message : String(e)
+    // Le statut n'a pas changé (blocage), mais le DOM de la checkbox a été
+    // modifié par le geste utilisateur. On crée de nouvelles références de
+    // tâches pour forcer Vue à réévaluer le binding :checked (one-way) et
+    // ramener la checkbox à son état réel (non cochée).
+    tasks.value = tasks.value.map((t) => ({ ...t }))
+  }
+}
+
+async function start(task: Task) {
+  if (task.id === undefined) return
+  statusError.value = null
+  await startTask(task.id)
 }
 
 async function update(task: Task, patch: TaskPatch) {
@@ -133,6 +151,7 @@ onMounted(loadTasks)
         :task="row.task"
         :depth="row.depth"
         @toggle="toggle(row.task)"
+        @start="start(row.task)"
         @update="(patch) => update(row.task, patch)"
         @delete="remove(row.task)"
         @add-sub-task="(subTitle: string) => onAddSubTask(row.task, subTitle)"
@@ -140,6 +159,15 @@ onMounted(loadTasks)
         @dropped="onDropped"
       />
     </TransitionGroup>
+
+    <p
+      v-if="statusError"
+      role="alert"
+      data-testid="status-error"
+      class="mt-2 text-sm text-destructive"
+    >
+      {{ statusError }}
+    </p>
   </main>
 </template>
 

@@ -78,15 +78,67 @@ export function useTasks() {
 
   async function toggleTask(id: number) {
     const db = await getDb()
-    const task = await db.get('tasks', id)
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    const task = all.find((t) => t.id === id)
     if (!task) return
-    // T1 : bascule binaire todo ↔ done. T6 affinera la sémantique
-    // (cocher depuis `doing` → `done`, déclencheur « Démarrer » explicite).
-    const next = task.status === 'done' ? 'todo' : 'done'
-    const updated = { ...task, status: next }
+
+    // Décocher : done → todo.
+    if (task.status === 'done') {
+      const updated = { ...task, status: 'todo' as const }
+      await db.put('tasks', updated)
+      tasks.value = all.map((t) => (t.id === id ? updated : t))
+      return
+    }
+
+    // Cocher : todo|doing → done (court-circuite doing). Blocage parent :
+    // un parent ne peut pas être terminé tant qu'une sous-tâche ne l'est pas.
+    const children = all.filter((t) => t.parentId === id)
+    const incomplete = children.filter((t) => t.status !== 'done')
+    if (incomplete.length > 0) {
+      throw new Error(
+        `Il reste ${incomplete.length} sous-tâche(s) non terminée(s)`,
+      )
+    }
+
+    const updated = { ...task, status: 'done' as const }
     await db.put('tasks', updated)
-    const idx = tasks.value.findIndex((t) => t.id === id)
-    if (idx !== -1) tasks.value[idx] = updated
+    tasks.value = all.map((t) => (t.id === id ? updated : t))
+  }
+
+  async function startTask(id: number) {
+    const db = await getDb()
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    const target = all.find((t) => t.id === id)
+    if (!target) return
+
+    // Ancêtres de la cible (chaîne parentId — profondeur max 2, pas de
+    // récursion). Une sous-tâche propage 'doing' à son parent.
+    const ancestorIds = new Set<number>()
+    if (target.parentId != null) {
+      ancestorIds.add(target.parentId)
+    }
+
+    // Invariant « une seule en cours » : la cible + ses ancêtres passent à
+    // 'doing', toutes les autres tâches 'doing' repassent à 'todo'. Les
+    // tâches 'done' et 'todo' non concernées sont préservées.
+    const tx = db.transaction('tasks', 'readwrite')
+    const updated: Task[] = []
+    for (const t of all) {
+      if (t.id == null) continue
+      if (t.id === id || ancestorIds.has(t.id)) {
+        const next = { ...t, status: 'doing' as const }
+        await tx.store.put(next)
+        updated.push(next)
+      } else if (t.status === 'doing') {
+        const next = { ...t, status: 'todo' as const }
+        await tx.store.put(next)
+        updated.push(next)
+      } else {
+        updated.push(t)
+      }
+    }
+    await tx.done
+    tasks.value = updated
   }
 
   async function updateTask(id: number, patch: TaskPatch) {
@@ -172,6 +224,7 @@ export function useTasks() {
     addTask,
     addSubTask,
     toggleTask,
+    startTask,
     updateTask,
     removeTask,
     reorderTask,

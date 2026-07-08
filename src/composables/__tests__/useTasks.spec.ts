@@ -490,6 +490,225 @@ describe('removeTask — suppression en cascade', () => {
   })
 })
 
+describe('startTask — statut transitif + invariant « une seule en cours »', () => {
+  it('marque une sous-tâche en cours et propage au parent (transitivité)', async () => {
+    const { addTask, addSubTask, startTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    const sub = await addSubTask(parent.id, 'S1')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    await loadTasks()
+
+    await startTask(sub.id)
+    await loadTasks()
+
+    const s = tasks.value.find((t) => t.title === 'S1')
+    const p = tasks.value.find((t) => t.title === 'Parent')
+    assertDefined(s)
+    assertDefined(p)
+    expect(s.status).toBe('doing')
+    expect(p.status).toBe('doing') // transitivité
+  })
+
+  it('invariant : démarrer une nouvelle cible repasse la précédente à todo', async () => {
+    const { addTask, startTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    const b = await addTask('B')
+    assertDefined(a)
+    assertDefined(b)
+    assertDefined(a.id)
+    assertDefined(b.id)
+    await loadTasks()
+
+    await startTask(a.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'A')?.status).toBe('doing')
+
+    await startTask(b.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'A')?.status).toBe('todo')
+    expect(tasks.value.find((t) => t.title === 'B')?.status).toBe('doing')
+  })
+
+  it('invariant : une seule en cours globalement (cible + ancêtres)', async () => {
+    const { addTask, addSubTask, startTask, loadTasks, tasks } = useTasks()
+    const pa = await addTask('PA')
+    const pb = await addTask('PB')
+    assertDefined(pa)
+    assertDefined(pb)
+    assertDefined(pa.id)
+    assertDefined(pb.id)
+    const sa1 = await addSubTask(pa.id, 'SA1')
+    const sa2 = await addSubTask(pa.id, 'SA2')
+    assertDefined(sa1)
+    assertDefined(sa2)
+    assertDefined(sa1.id)
+    assertDefined(sa2.id)
+    await loadTasks()
+
+    // Démarrer SA1 → SA1 + PA en cours.
+    await startTask(sa1.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'SA1')?.status).toBe('doing')
+    expect(tasks.value.find((t) => t.title === 'PA')?.status).toBe('doing')
+
+    // Démarrer SA2 → SA1 repasse à todo, SA2 + PA en cours.
+    await startTask(sa2.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'SA1')?.status).toBe('todo')
+    expect(tasks.value.find((t) => t.title === 'SA2')?.status).toBe('doing')
+    expect(tasks.value.find((t) => t.title === 'PA')?.status).toBe('doing')
+    // PB n'a jamais été touché.
+    expect(tasks.value.find((t) => t.title === 'PB')?.status).toBe('todo')
+  })
+
+  it('invariant : démarrer une racine repasse les autres en cours à todo', async () => {
+    const { addTask, addSubTask, startTask, loadTasks, tasks } = useTasks()
+    const pa = await addTask('PA')
+    const b = await addTask('B')
+    assertDefined(pa)
+    assertDefined(b)
+    assertDefined(pa.id)
+    assertDefined(b.id)
+    const sub = await addSubTask(pa.id, 'S')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    await loadTasks()
+
+    // Démarrer S → S + PA en cours.
+    await startTask(sub.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'S')?.status).toBe('doing')
+    expect(tasks.value.find((t) => t.title === 'PA')?.status).toBe('doing')
+
+    // Démarrer B (racine) → S et PA repassent à todo, B en cours.
+    await startTask(b.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'S')?.status).toBe('todo')
+    expect(tasks.value.find((t) => t.title === 'PA')?.status).toBe('todo')
+    expect(tasks.value.find((t) => t.title === 'B')?.status).toBe('doing')
+  })
+
+  it('ne touche pas les tâches terminées (done reste done)', async () => {
+    const { addTask, startTask, toggleTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    const b = await addTask('B')
+    assertDefined(a)
+    assertDefined(b)
+    assertDefined(a.id)
+    assertDefined(b.id)
+    await loadTasks()
+
+    // A terminée.
+    await toggleTask(a.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'A')?.status).toBe('done')
+
+    // Démarrer B : A reste terminée.
+    await startTask(b.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'A')?.status).toBe('done')
+    expect(tasks.value.find((t) => t.title === 'B')?.status).toBe('doing')
+  })
+})
+
+describe('toggleTask — checkbox binaire + blocage parent', () => {
+  it('court-circuite de todo à done (saute doing)', async () => {
+    const { addTask, toggleTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    assertDefined(a)
+    assertDefined(a.id)
+    await loadTasks()
+
+    await toggleTask(a.id)
+    await loadTasks()
+    expect(tasks.value[0]?.status).toBe('done')
+  })
+
+  it('passe de doing à done quand on coche', async () => {
+    const { addTask, startTask, toggleTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    assertDefined(a)
+    assertDefined(a.id)
+    await loadTasks()
+
+    await startTask(a.id) // → doing
+    await toggleTask(a.id) // → done
+    await loadTasks()
+    expect(tasks.value[0]?.status).toBe('done')
+  })
+
+  it('décoche de done vers todo', async () => {
+    const { addTask, toggleTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    assertDefined(a)
+    assertDefined(a.id)
+    await loadTasks()
+
+    await toggleTask(a.id) // → done
+    await toggleTask(a.id) // → todo
+    await loadTasks()
+    expect(tasks.value[0]?.status).toBe('todo')
+  })
+
+  it('bloque un parent terminé tant qu’une sous-tâche est non terminée', async () => {
+    const { addTask, addSubTask, toggleTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'S1')
+    await addSubTask(parent.id, 'S2')
+    await loadTasks()
+
+    // Le parent a 2 sous-tâches non terminées → blocage.
+    await expect(toggleTask(parent.id)).rejects.toThrow(
+      /Il reste 2 sous-tâche\(s\) non terminée\(s\)/,
+    )
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'Parent')?.status).toBe('todo')
+  })
+
+  it('autorise un parent terminé quand toutes les sous-tâches sont terminées', async () => {
+    const { addTask, addSubTask, toggleTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    const s1 = await addSubTask(parent.id, 'S1')
+    const s2 = await addSubTask(parent.id, 'S2')
+    assertDefined(s1)
+    assertDefined(s2)
+    assertDefined(s1.id)
+    assertDefined(s2.id)
+    await loadTasks()
+
+    // Terminer toutes les sous-tâches d'abord.
+    await toggleTask(s1.id)
+    await toggleTask(s2.id)
+    // Puis le parent → autorisé.
+    await toggleTask(parent.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'Parent')?.status).toBe('done')
+  })
+
+  it('ne bloque pas une sous-tâche (pas de children)', async () => {
+    const { addTask, addSubTask, toggleTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    const sub = await addSubTask(parent.id, 'S1')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    await loadTasks()
+
+    // Une sous-tâche n’a pas d’enfants → pas de blocage.
+    await expect(toggleTask(sub.id)).resolves.toBeUndefined()
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'S1')?.status).toBe('done')
+  })
+})
+
 describe('backfillStatus (migration v2 → v3)', () => {
   it('transforme done:true en status "done"', () => {
     expect(backfillStatus({ done: true })).toBe('done')

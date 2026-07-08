@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, useId } from 'vue'
+import { ref, useId, watch } from 'vue'
 import { GripVertical } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +17,7 @@ const emit = defineEmits<{
   dragStarted: [id: number]
   dropped: [targetId: number]
   addSubTask: [title: string]
+  start: []
 }>()
 
 const editing = ref(false)
@@ -31,6 +32,21 @@ const descriptionId = useId()
 const subTaskTitleId = useId()
 
 const isRoot = props.depth === 0
+
+// Ref impérative sur la checkbox : le binding :checked (one-way) n'est pas
+// re-patché par Vue quand la valeur est inchangée (false→false). Or, lors
+// d'un blocage (toggle rejeté), le DOM a été modifié par le geste utilisateur
+// et doit être resynchronisé. Le watch sur props.task (référence qui change
+// quand le parent re-émet la liste) force la resynchronisation.
+const checkboxRef = ref<HTMLInputElement | null>(null)
+watch(
+  () => props.task,
+  () => {
+    if (checkboxRef.value) {
+      checkboxRef.value.checked = props.task.status === 'done'
+    }
+  },
+)
 
 function startEdit() {
   draftTitle.value = props.task.title
@@ -106,6 +122,7 @@ function onDrop(event: DragEvent) {
         <GripVertical class="size-4" />
       </span>
       <input
+        ref="checkboxRef"
         type="checkbox"
         class="mt-1 size-4"
         :checked="task.status === 'done'"
@@ -113,12 +130,20 @@ function onDrop(event: DragEvent) {
         @change="emit('toggle')"
       />
       <div class="flex-1">
-        <p
-          class="font-medium"
-          :class="{ 'text-muted-foreground line-through': task.status === 'done' }"
-        >
-          {{ task.title }}
-        </p>
+        <div class="flex items-center gap-2">
+          <p
+            class="font-medium"
+            :class="{ 'text-muted-foreground line-through': task.status === 'done' }"
+          >
+            {{ task.title }}
+          </p>
+          <span
+            v-if="task.status === 'doing'"
+            data-testid="status-doing"
+            class="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+            >En cours</span
+          >
+        </div>
         <p v-if="task.description" class="text-sm text-muted-foreground">
           {{ task.description }}
         </p>
@@ -153,6 +178,13 @@ function onDrop(event: DragEvent) {
         </form>
       </div>
       <div class="flex flex-wrap gap-1">
+        <Button
+          v-if="task.status === 'todo'"
+          size="sm"
+          :aria-label="`Démarrer « ${task.title} »`"
+          @click="emit('start')"
+          >Démarrer</Button
+        >
         <Button
           v-if="isRoot"
           variant="ghost"

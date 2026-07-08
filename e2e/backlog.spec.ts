@@ -290,3 +290,86 @@ test('la suppression d’un parent refusée garde les sous-tâches', async ({
   await expect(page.getByText('Parent', { exact: true })).toBeVisible()
   await expect(page.getByText('S1', { exact: true })).toBeVisible()
 })
+
+test('démarrer une sous-tâche propage le statut en cours au parent', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('S1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Démarrer la sous-tâche.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'S1' })
+    .getByRole('button', { name: /Démarrer/ })
+    .click()
+
+  // La sous-tâche et le parent affichent « En cours ».
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'S1' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+
+  // Persistance après reload.
+  await page.reload()
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+})
+
+test('le blocage d’un parent terminé affiche le feedback « N sous-tâche(s) »', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  for (const t of ['S1', 'S2']) {
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByRole('button', { name: /sous-tâche/i })
+      .click()
+    await page
+      .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+      .fill(t)
+    await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+    await expect(page.getByText(t, { exact: true })).toBeVisible()
+  }
+
+  // Tenter de cocher le parent (checkbox) → blocage, feedback affiché.
+  // On utilise .click() (et non .check()) car le toggle est rejeté : la
+  // checkbox revient à non-cochée, ce que .check() interpréterait comme un
+  // échec et ferait reboucler.
+  const parentCheckbox = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('checkbox', { name: /Parent/ })
+  await parentCheckbox.click()
+
+  await expect(page.getByTestId('status-error')).toHaveText(
+    /Il reste 2 sous-tâche\(s\) non terminée\(s\)/,
+  )
+  // La checkbox reste décochée (le parent n'est pas terminé).
+  await expect(parentCheckbox).not.toBeChecked()
+})
