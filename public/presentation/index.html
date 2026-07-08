@@ -10,192 +10,218 @@
   <body>
     <div class="reveal">
       <div class="slides">
-        <section data-markdown
-          data-separator="^---$"
-          data-separator-vertical="^--$"
-          data-separator-notes="^Note:">
-          <script type="text/template">
 
+        <section data-markdown>
+          <script type="text/template">
             # POC IA
             ## opencode + skills Matt Pocock
 
             Benoît Vasseur · Zenika · 2026
+          </script>
+        </section>
 
-            ---
+        <section>
+          <section data-markdown>
+            <script type="text/template">
+              ## 1. Contexte
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### D'où je pars
 
-            ## 1. Contexte
+              - Copilot via Cursor/Mission : assez peu utilisé
+              - Atelier Zenika : **bmad zPlanner**
+              - Veille : vidéos, échanges sur le sujet
+              - **1h30/jour × 5 jours** avec opencode
+              - Tous les commits produits par des agents (via mon poste)
+            </script>
+          </section>
+        </section>
 
-            --
+        <section>
+          <section data-markdown>
+            <script type="text/template">
+              ## 2. Résultat final
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### L'application
 
-            ### D'où je pars
+              - **todo-pomodoro** : Vue 3 + TypeScript + Tailwind v4 + shadcn-vue
+              - Backlog CRUD fonctionnel (issue #2)
+              - Drag & drop, dark mode, persistance IndexedDB
+              - Déploiement GitHub Pages :
+                - Production preview (main)
+                - PR previews (éphémères)
+                - Rapports de test & coverage déployés
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Issues & PRs
 
-            - Copilot via Cursor/Mission : assez peu utilisé
-            - Atelier Zenika : **bmad zPlanner**
-            - Veille : vidéos, échanges sur le sujet
-            - **1h30/jour × 5 jours** avec opencode
-            - Tous les commits produits par des agents (via mon poste)
+              - **15 issues** · **9 PRs** · **94 commits** · **25 branches**
+              - Workflow complet : PRD → Issues → Implémentation → Review
+              - Labels de triage : `ready-for-agent`, `needs-info`, `wontfix`...
+              - Issue #3 (sous-tâches décoratives) → `wontfix` + ADR #0005
+              - Issue #2 (CRUD backlog) → PR #20, 12 commits en TDD
+            </script>
+          </section>
+        </section>
 
-            ---
+        <section>
+          <section data-markdown>
+            <script type="text/template">
+              ## 3. Outils et méthode
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Outils
 
-            ## 2. Résultat final
+              | Outil | Rôle |
+              |-------|------|
+              | **opencode** | CLI agent sur mon poste |
+              | **opencode-go** | Modèle GLM-5.2 |
+              | **Skills Matt Pocock** | 20 skills métier |
+              | **OpenCode GitHub Agent** | Agent auto-déclenché via `/oc` |
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Flow des skills
 
-            --
+              ```
+              Grilling ──→ to-prd ──→ to-issues ──→ implement ──→ code-review
+              ```
 
-            ### L'application
+              Chaque skill produit un artefact :
+              - **Grill** : questions / décisions validées
+              - **to-prd** : PRD publié sur le tracker
+              - **to-issues** : issues verticales indépendantes
+              - **implement** (via **tdd**) : code + tests
+              - **code-review** : rapport standards / spec
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Exemple — issue #2 (Backlog CRUD)
 
-            - **todo-pomodoro** : Vue 3 + TypeScript + Tailwind v4 + shadcn-vue
-            - Backlog CRUD fonctionnel (issue #2)
-            - Drag & drop, dark mode, persistance IndexedDB
-            - Déploiement GitHub Pages :
-              - Production preview (main)
-              - PR previews (éphémères)
-              - Rapports de test & coverage déployés
+              1. **Grill** → clarifier le périmètre
+              2. **PRD** → rédigé et publié
+              3. **Issues** → 1 slice verticale complète
+              4. **Implémenté en TDD** (rouge → vert → refactor)
+              5. **Review** → TODOs.md : 10 items corrigés
 
-            --
+              Résultat : backlog fonctionnel, CRUD complet,
+              tests unitaires + composants + e2e, coverage CI
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Déboires rencontrés
 
-            ### Issues & PRs
+              - **Scope creep** : l'agent en fait parfois trop
+              - **Path finding** : correction du `base path` pour GitHub Pages
+              - **Config** : bien paramétrer les modèles en amont
+              - **Dépendances** : l'agent installe des libs non demandées
+              - **Hallucinations** : références à des modules inexistants
+            </script>
+          </section>
+        </section>
 
-            - **15 issues** · **9 PRs** · **94 commits** · **25 branches**
-            - Workflow complet : PRD → Issues → Implémentation → Review
-            - Labels de triage : `ready-for-agent`, `needs-info`, `wontfix`...
-            - Issue #3 (sous-tâches décoratives) → `wontfix` + ADR #0005
-            - Issue #2 (CRUD backlog) → PR #20, 12 commits en TDD
+        <section>
+          <section data-markdown>
+            <script type="text/template">
+              ## 4. Difficultés
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Parallélisation
 
-            ---
+              Lancer **plusieurs agents en même temps** :
+              - Les alimenter en tâches sans perdre le fil
+              - Suivre leur progression
+              - Gérer interdépendances et goulots d'étranglement
+              - Trouver le bon rythme d'enchaînement
 
-            ## 3. Outils et méthode
+              *Pas de solution miracle — l'orchestration manuelle reste clé.*
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Budget
 
-            --
+              | Modèle | Coût | Usage |
+              |--------|------|-------|
+              | DeepSeek Flash v4 | ~0 | Triage, grill, tâches simples |
+              | GLM-5.2 | ++ | Implémentation fine |
 
-            ### Outils
+              Budget semaine cramé en 3 jours.
+              → **Quel modèle pour quel type de tâche ?**
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Appropriation
 
-            | Outil | Rôle |
-            |-------|------|
-            | **opencode** | CLI agent sur mon poste |
-            | **opencode-go** | Modèle GLM-5.2 |
-            | **Skills Matt Pocock** | 20 skills métier |
-            | **OpenCode GitHub Agent** | Agent auto-déclenché via `/oc` |
+              - L'agent produit beaucoup, **vite**
+              - Tentation de survoler ce qui est généré
+              - Risque : ne plus être maître de son code
+              - Solution : **review systématique**, rester actif
 
-            --
+              *L'agent écrit, le développeur décide.*
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Rigueur & Fatigue
 
-            ### Flow des skills
+              **Rigueur**
+              - Sessions parallèles → tentation d'aller vite
+              - Checker qualité, tests, scope
+              - Tenir le cap sur le plan initial
 
-            ```
-            Grilling ──→ to-prd ──→ to-issues ──→ implement ──→ code-review
-              (interview)  (PRD)      (découpage)    (TDD)        (review)
-            ```
+              **Fatigue**
+              - 1h30 en soirée après le boulot
+              - Le parallélisme multiplie l'énergie cognitive
+              - Trouver son rythme tenable sur la durée
+            </script>
+          </section>
+        </section>
 
-            Chaque skill produit un artefact :
-            - **Grill** : questions / décisions validées
-            - **to-prd** : PRD publié sur le tracker
-            - **to-issues** : issues verticales indépendantes
-            - **implement** (via **tdd**) : code + tests
-            - **code-review** : rapport standards / spec
+        <section>
+          <section data-markdown>
+            <script type="text/template">
+              ## 5. Ouvertures
+            </script>
+          </section>
+          <section data-markdown>
+            <script type="text/template">
+              ### Pistes pour la suite
 
-            --
+              - **Mutation testing** (Stryker)
+              - **Sandcastle** (mattpocock/sandcastle) — workflows élaborés
+              - **OpenCode Web** — interface navigateur
+              - **Parallélisation méthodologique** : backlog grooming,
+                file d'attente, orchestration outillée
+              - **GitLab CI runner** / serveurs agent IA dédiés
+              - **Nix** pour environnements reproductibles
+            </script>
+          </section>
+        </section>
 
-            ### Exemple de session — issue #2
-
-            **Backlog CRUD** (PR #20)
-
-            1. Grill → clarifier le périmètre
-            2. PRD → rédigé et publié
-            3. Issues → 1 seule issue (slice verticale complète)
-            4. Implémenté en TDD (tests rouges → verts → refactor)
-            5. Review → TODOs.md : 10 items corrigés
-
-            Résultat : backlog fonctionnel avec drag & drop, CRUD complet,
-            tests unitaires + composants + e2e, coverage CI
-
-            --
-
-            ### Déboires rencontrés
-
-            - **Scope creep** : l'agent en fait parfois trop (review nécessaire)
-            - **Path finding** : correction du `router base path` pour GitHub Pages
-            - **Config** : bien paramétrer les modèles en amont
-            - **Dépendances** : l'agent installe des libs non demandées
-            - **Hallucinations** : références à des modules inexistants
-
-            ---
-
-            ## 4. Difficultés
-
-            --
-
-            ### Parallélisation
-
-            Lancer **plusieurs agents en même temps** :
-            - Les alimenter en tâches sans perdre le fil
-            - Suivre leur progression
-            - Gérer interdépendances et goulots d'étranglement
-            - Trouver le bon rythme d'enchaînement
-
-            *Pas de solution miracle — l'orchestration manuelle reste clé.*
-
-            --
-
-            ### Budget
-
-            | Modèle | Coût | Usage |
-            |--------|------|-------|
-            | DeepSeek Flash v4 | ~0 | Triage, grill, tâches simples |
-            | GLM-5.2 | ++ | Implémentation fine |
-
-            Budget semaine cramé en 3 jours sur GLM-5.2.
-
-            → **Quel modèle pour quel type de tâche ?**
-
-            --
-
-            ### Appropriation
-
-            - L'agent produit beaucoup, **vite**
-            - Tentation de survoler ce qui est généré
-            - Risque : ne plus être maître de son code
-            - Solution : **review systématique**, rester actif,
-              ne pas merger sans comprendre
-
-            *L'agent écrit, le développeur décide.*
-
-            --
-
-            ### Rigueur & Fatigue
-
-            **Rigueur**
-            - Sessions parallèles → tentation d'aller vite
-            - Checker qualité, tests, scope
-            - Tenir le cap sur le plan initial
-
-            **Fatigue**
-            - 1h30 en soirée après le boulot
-            - Le parallélisme multiplie l'énergie cognitive
-            - Trouver son rythme tenable sur la durée
-
-            ---
-
-            ## 5. Ouvertures
-
-            --
-
-            ### Pistes pour la suite
-
-            - **Mutation testing** (Stryker) sur la stack existante
-            - **Sandcastle** (mattpocock/sandcastle) — workflows élaborés
-            - **OpenCode Web** — interface web navigateur
-            - **Parallélisation méthodologique** : backlog grooming,
-              file d'attente, orchestration outillée
-            - **GitLab CI runner** / serveurs agent IA dédiés
-            - **Nix** pour environnements reproductibles
-
-            ---
-
+        <section data-markdown>
+          <script type="text/template">
             ## Merci
 
             Questions ?
-
           </script>
         </section>
+
       </div>
     </div>
 
