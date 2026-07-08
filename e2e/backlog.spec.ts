@@ -18,7 +18,7 @@ test('parcours complet CRUD backlog avec persistance', async ({ page }) => {
   await page
     .getByRole('textbox', { name: 'Description' })
     .fill('Définir le périmètre')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
 
   // Lister : la tâche apparaît dans le backlog.
   await expect(page.getByText('Écrire un brief', { exact: true })).toBeVisible()
@@ -67,13 +67,13 @@ test('réordonne les tâches par drag & drop', async ({ page }) => {
   await expect(page.getByText('Le backlog est vide.')).toBeVisible()
 
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche A')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
   // On attend que le formulaire soit réinitialisé avant de saisir la suivante
   // (addTask est asynchrone : sans cela, la 2e saisie peut écraser le reset).
   await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
 
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche B')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
 
   // Ordre initial : A puis B.
@@ -99,4 +99,55 @@ test('réordonne les tâches par drag & drop', async ({ page }) => {
   await page.reload()
   await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche B')
   await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche A')
+})
+
+test('crée une sous-tâche noble et l’affiche indentée sous son parent', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Créer une tâche parent.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByText('Tâche parent', { exact: true })).toBeVisible()
+
+  // Déplier le champ inline « + Sous-tâche » sur le parent.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Tâche parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+
+  // Saisir le titre de la sous-tâche et valider.
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('Première sous-tâche')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // La sous-tâche apparaît sous le parent, indentée (data-testid sur l'item).
+  const subItem = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Première sous-tâche' })
+  await expect(subItem).toBeVisible()
+  await expect(subItem).toHaveAttribute('data-depth', '1')
+
+  // Le parent précède la sous-tâche dans l'ordre d'affichage.
+  const items = page.getByRole('listitem')
+  await expect(items.nth(0)).toContainText('Tâche parent')
+  await expect(items.nth(1)).toContainText('Première sous-tâche')
+
+  // La sous-tâche n'expose pas de bouton « + Sous-tâche » (récursion interdite).
+  await expect(
+    subItem.getByRole('button', { name: /Ajouter une sous-tâche/i }),
+  ).toHaveCount(0)
+
+  // Persistance : la hiérarchie survit au reload.
+  await page.reload()
+  await expect(page.getByText('Tâche parent', { exact: true })).toBeVisible()
+  await expect(page.getByText('Première sous-tâche', { exact: true })).toBeVisible()
+  const subItemAfterReload = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Première sous-tâche' })
+  await expect(subItemAfterReload).toHaveAttribute('data-depth', '1')
 })

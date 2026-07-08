@@ -6,21 +6,31 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { Task, TaskPatch } from '@/db'
 
-const props = defineProps<{ task: Task }>()
+const props = withDefaults(
+  defineProps<{ task: Task; depth?: number }>(),
+  { depth: 0 },
+)
 const emit = defineEmits<{
   toggle: []
   update: [patch: TaskPatch]
   delete: []
   dragStarted: [id: number]
   dropped: [targetId: number]
+  addSubTask: [title: string]
 }>()
 
 const editing = ref(false)
 const draftTitle = ref('')
 const draftDescription = ref('')
 
+const addingSubTask = ref(false)
+const subTaskTitle = ref('')
+
 const titleId = useId()
 const descriptionId = useId()
+const subTaskTitleId = useId()
+
+const isRoot = props.depth === 0
 
 function startEdit() {
   draftTitle.value = props.task.title
@@ -42,6 +52,24 @@ function save() {
   editing.value = false
 }
 
+function startAddSubTask() {
+  subTaskTitle.value = ''
+  addingSubTask.value = true
+}
+
+function cancelAddSubTask() {
+  addingSubTask.value = false
+  subTaskTitle.value = ''
+}
+
+function submitSubTask() {
+  const title = subTaskTitle.value.trim()
+  if (!title) return
+  emit('addSubTask', title)
+  addingSubTask.value = false
+  subTaskTitle.value = ''
+}
+
 function onDragStart(event: DragEvent) {
   if (props.task.id === undefined) return
   emit('dragStarted', props.task.id)
@@ -61,12 +89,15 @@ function onDrop(event: DragEvent) {
 
 <template>
   <li
+    :data-depth="props.depth"
     class="flex items-start gap-3 rounded-md border border-border bg-card p-3"
+    :class="props.depth > 0 ? 'ml-6' : ''"
     @dragover.prevent
     @drop="onDrop"
   >
     <template v-if="!editing">
       <span
+        v-if="isRoot"
         data-testid="drag-handle"
         draggable="true"
         aria-hidden="true"
@@ -92,8 +123,45 @@ function onDrop(event: DragEvent) {
         <p v-if="task.description" class="text-sm text-muted-foreground">
           {{ task.description }}
         </p>
+
+        <form
+          v-if="addingSubTask"
+          class="mt-2 space-y-2"
+          @submit.prevent="submitSubTask"
+        >
+          <div class="space-y-1">
+            <label :for="subTaskTitleId" class="text-sm font-medium"
+              >Titre de la sous-tâche</label
+            >
+            <Input
+              :id="subTaskTitleId"
+              v-model="subTaskTitle"
+              type="text"
+              placeholder="Titre de la sous-tâche"
+              required
+            />
+          </div>
+          <div class="flex gap-1">
+            <Button type="submit" size="sm">Ajouter la sous-tâche</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              @click="cancelAddSubTask"
+              >Annuler</Button
+            >
+          </div>
+        </form>
       </div>
       <div class="flex gap-1">
+        <Button
+          v-if="isRoot"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Ajouter une sous-tâche à « ${task.title} »`"
+          @click="startAddSubTask"
+          >+ Sous-tâche</Button
+        >
         <Button
           variant="ghost"
           size="sm"

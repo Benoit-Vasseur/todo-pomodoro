@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +12,7 @@ const {
   loading,
   loadTasks,
   addTask,
+  addSubTask,
   toggleTask,
   updateTask,
   removeTask,
@@ -21,6 +22,30 @@ const {
 const title = ref('')
 const description = ref('')
 const draggedId = ref<number | null>(null)
+
+interface DisplayRow {
+  task: Task
+  depth: number
+}
+
+// Affichage hiérarchique : racines (par order) suivies de leurs sous-tâches
+// (par order), indentées. Calculé à partir de la liste plate `tasks`.
+const displayRows = computed<DisplayRow[]>(() => {
+  const rows: DisplayRow[] = []
+  const roots = tasks.value
+    .filter((t) => t.parentId == null)
+    .sort((a, b) => a.order - b.order)
+  for (const root of roots) {
+    rows.push({ task: root, depth: 0 })
+    const children = tasks.value
+      .filter((t) => t.parentId === root.id)
+      .sort((a, b) => a.order - b.order)
+    for (const child of children) {
+      rows.push({ task: child, depth: 1 })
+    }
+  }
+  return rows
+})
 
 async function onSubmit() {
   const trimmed = title.value.trim()
@@ -43,6 +68,11 @@ async function update(task: Task, patch: TaskPatch) {
 async function remove(task: Task) {
   if (task.id === undefined) return
   await removeTask(task.id)
+}
+
+async function onAddSubTask(task: Task, subTitle: string) {
+  if (task.id === undefined) return
+  await addSubTask(task.id, subTitle)
 }
 
 function onDragStarted(id: number) {
@@ -83,12 +113,14 @@ onMounted(loadTasks)
 
     <ul v-else class="mt-6 space-y-2">
       <TaskItem
-        v-for="task in tasks"
-        :key="task.id"
-        :task="task"
-        @toggle="toggle(task)"
-        @update="(patch) => update(task, patch)"
-        @delete="remove(task)"
+        v-for="row in displayRows"
+        :key="row.task.id"
+        :task="row.task"
+        :depth="row.depth"
+        @toggle="toggle(row.task)"
+        @update="(patch) => update(row.task, patch)"
+        @delete="remove(row.task)"
+        @add-sub-task="(subTitle: string) => onAddSubTask(row.task, subTitle)"
         @drag-started="onDragStarted"
         @dropped="onDropped"
       />

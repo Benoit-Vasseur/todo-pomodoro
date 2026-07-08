@@ -195,6 +195,69 @@ describe('useTasks', () => {
   })
 })
 
+describe('addSubTask — sous-tâches nobles', () => {
+  it('crée une sous-tâche avec parentId, status "todo" et order propre', async () => {
+    const { addTask, addSubTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'Sous-tâche')
+
+    await loadTasks()
+    const sub = tasks.value.find((t) => t.title === 'Sous-tâche')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    expect(sub.parentId).toBe(parent.id)
+    expect(sub.status).toBe('todo')
+    expect(sub.order).toBe(0)
+  })
+
+  it('assigne un order croissant aux sous-tâches d’un même parent', async () => {
+    const { addTask, addSubTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'Sous A')
+    await addSubTask(parent.id, 'Sous B')
+
+    await loadTasks()
+    const subs = tasks.value.filter((t) => t.parentId === parent.id)
+    expect(subs.map((t) => t.title)).toEqual(['Sous A', 'Sous B'])
+    expect(subs.map((t) => t.order)).toEqual([0, 1])
+  })
+
+  it('refuse de créer une sous-tâche d’une sous-tâche (non-récursion)', async () => {
+    const { addTask, addSubTask } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    const sub = await addSubTask(parent.id, 'Sous-tâche')
+    assertDefined(sub)
+    assertDefined(sub.id)
+
+    // Créer une sous-tâche de la sous-tâche → refus (récursion interdite).
+    await expect(addSubTask(sub.id, 'Sous-sous-tâche')).rejects.toThrow(
+      /récursion/i,
+    )
+  })
+
+  it("l'order des sous-tâches est indépendant de l'order des racines", async () => {
+    const { addTask, addSubTask, loadTasks, tasks } = useTasks()
+    await addTask('Racine A') // order 0
+    const parent = await addTask('Racine B') // order 1
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'Sous B1') // order 0 (scope siblings)
+    await addSubTask(parent.id, 'Sous B2') // order 1
+
+    await loadTasks()
+    const roots = tasks.value.filter((t) => t.parentId == null)
+    const subs = tasks.value.filter((t) => t.parentId === parent.id)
+    expect(roots.map((t) => t.order)).toEqual([0, 1])
+    expect(subs.map((t) => t.order)).toEqual([0, 1])
+  })
+})
+
 describe('backfillStatus (migration v2 → v3)', () => {
   it('transforme done:true en status "done"', () => {
     expect(backfillStatus({ done: true })).toBe('done')

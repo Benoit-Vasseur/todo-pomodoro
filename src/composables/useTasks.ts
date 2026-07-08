@@ -28,11 +28,46 @@ export function useTasks() {
     const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
     // max+1 plutôt que length : après suppressions, length peut entrer en
     // collision avec un ordre existant (trous dans la séquence).
-    const order = all.reduce((max, t) => Math.max(max, t.order), -1) + 1
+    // Scope : racines seulement (les sous-tâches ont leur propre order).
+    const roots = all.filter((t) => t.parentId == null)
+    const order = roots.reduce((max, t) => Math.max(max, t.order), -1) + 1
     const id = await db.add('tasks', {
       title,
       description,
       status: 'todo',
+      order,
+      createdAt: new Date(),
+    })
+    const task = await db.get('tasks', id)
+    if (task) tasks.value.push(task)
+    return task
+  }
+
+  async function addSubTask(
+    parentId: number,
+    title: string,
+    description?: string,
+  ) {
+    const db = await getDb()
+    const parent = await db.get('tasks', parentId)
+    if (!parent) {
+      throw new Error(`Parent introuvable (id=${parentId})`)
+    }
+    // Non-récursion : un parent qui a déjà un parentId est une sous-tâche.
+    // Interdiction de créer une sous-tâche d'une sous-tâche.
+    if (parent.parentId != null) {
+      throw new Error(
+        'Récursion interdite : une sous-tâche ne peut pas avoir de sous-tâche',
+      )
+    }
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    const siblings = all.filter((t) => t.parentId === parentId)
+    const order = siblings.reduce((max, t) => Math.max(max, t.order), -1) + 1
+    const id = await db.add('tasks', {
+      title,
+      description,
+      status: 'todo',
+      parentId,
       order,
       createdAt: new Date(),
     })
@@ -74,28 +109,44 @@ export function useTasks() {
     if (draggedId === targetId) return
     const db = await getDb()
     const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
-    const fromIdx = all.findIndex((t) => t.id === draggedId)
+    // Scope : racines seulement (les sous-tâches ont leur propre order,
+    // géré séparément — T4 affinera le drag intra-niveau).
+    const roots = all.filter((t) => t.parentId == null)
+    const fromIdx = roots.findIndex((t) => t.id === draggedId)
     if (fromIdx === -1) return
-    const removed = all.splice(fromIdx, 1)
+    const removed = roots.splice(fromIdx, 1)
     const dragged = removed[0]
     if (!dragged) return
-    const toIdx = all.findIndex((t) => t.id === targetId)
+    const toIdx = roots.findIndex((t) => t.id === targetId)
     if (toIdx === -1) return
     // Sémantique « déposer sur la cible » : l'élément prend la place de la
     // cible — inséré avant si on remonte, après si on descend (permet
     // d'atteindre la dernière position).
     const insertAt = fromIdx <= toIdx ? toIdx + 1 : toIdx
-    all.splice(insertAt, 0, dragged)
-    const reordered = all.map((task, index) => ({ ...task, order: index }))
+    roots.splice(insertAt, 0, dragged)
+    const reorderedRoots = roots.map((task, index) => ({ ...task, order: index }))
     const tx = db.transaction('tasks', 'readwrite')
     await Promise.all(
-      reordered
+      reorderedRoots
         .filter((t) => t.id !== undefined)
         .map((t) => tx.store.put(t)),
     )
     await tx.done
-    tasks.value = reordered
+    // Reconstruit la liste réactive : racines réordonnées + sous-tâches
+    // (inchangées). L'affichage hiérarchique est calculé côté vue.
+    const subs = all.filter((t) => t.parentId != null)
+    tasks.value = [...reorderedRoots, ...subs]
   }
 
-  return { tasks, loading, loadTasks, addTask, toggleTask, updateTask, removeTask, reorderTask }
+  return {
+    tasks,
+    loading,
+    loadTasks,
+    addTask,
+    addSubTask,
+    toggleTask,
+    updateTask,
+    removeTask,
+    reorderTask,
+  }
 }
