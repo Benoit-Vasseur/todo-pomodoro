@@ -153,7 +153,7 @@ function onDrop(event: DragEvent) {
           </div>
         </form>
       </div>
-      <div class="flex gap-1">
+      <div class="flex flex-wrap gap-1">
         <Button
           v-if="isRoot"
           variant="ghost"
