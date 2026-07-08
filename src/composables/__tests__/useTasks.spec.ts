@@ -692,6 +692,36 @@ describe('toggleTask — checkbox binaire + blocage parent', () => {
     expect(tasks.value.find((t) => t.title === 'Parent')?.status).toBe('done')
   })
 
+  it('décocher une sous-tâche fait retomber le parent done à todo (invariant)', async () => {
+    const { addTask, addSubTask, toggleTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'S1')
+    await addSubTask(parent.id, 'S2')
+    await loadTasks()
+
+    const s1 = tasks.value.find((t) => t.title === 'S1')
+    const s2 = tasks.value.find((t) => t.title === 'S2')
+    assertDefined(s1)
+    assertDefined(s2)
+    assertDefined(s1.id)
+    assertDefined(s2.id)
+
+    // Terminer toutes les sous-tâches puis le parent.
+    await toggleTask(s1.id)
+    await toggleTask(s2.id)
+    await toggleTask(parent.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'Parent')?.status).toBe('done')
+
+    // Décocher S1 → le parent ne peut plus être terminé → retombe à todo.
+    await toggleTask(s1.id)
+    await loadTasks()
+    expect(tasks.value.find((t) => t.title === 'S1')?.status).toBe('todo')
+    expect(tasks.value.find((t) => t.title === 'Parent')?.status).toBe('todo')
+  })
+
   it('ne bloque pas une sous-tâche (pas de children)', async () => {
     const { addTask, addSubTask, toggleTask, loadTasks, tasks } = useTasks()
     const parent = await addTask('Parent')

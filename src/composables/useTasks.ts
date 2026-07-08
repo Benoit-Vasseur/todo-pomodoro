@@ -86,7 +86,21 @@ export function useTasks() {
     if (task.status === 'done') {
       const updated = { ...task, status: 'todo' as const }
       await db.put('tasks', updated)
-      tasks.value = all.map((t) => (t.id === id ? updated : t))
+      // Invariant maintenu : si la tâche décochée est une sous-tâche et que
+      // son parent était terminé, le parent ne peut plus l'être (une sous-
+      // tâche n'est plus terminée) → il retombe à todo.
+      const parent = updated.parentId != null
+        ? all.find((t) => t.id === updated.parentId)
+        : undefined
+      if (parent && parent.status === 'done') {
+        const parentUpdated = { ...parent, status: 'todo' as const }
+        await db.put('tasks', parentUpdated)
+        tasks.value = all.map((t) =>
+          t.id === id ? updated : t.id === parent.id ? parentUpdated : t,
+        )
+      } else {
+        tasks.value = all.map((t) => (t.id === id ? updated : t))
+      }
       return
     }
 
