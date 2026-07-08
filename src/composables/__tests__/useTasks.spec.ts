@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { openDB } from 'idb'
 import { useTasks } from '@/composables/useTasks'
-import { getDb } from '@/db'
+import {
+  getDb,
+  __resetDbForTests,
+  DB_NAME,
+  backfillStatus,
+  type Task,
+  type TaskPatch,
+} from '@/db'
 
 function assertDefined<T>(value: T): asserts value is NonNullable<T> {
   expect(value).toBeDefined()
@@ -27,10 +35,11 @@ describe('useTasks', () => {
     const task = tasks.value[0]
     assertDefined(task)
     expect(task.title).toBe('Faire les courses')
-    expect(task.done).toBe(false)
+    expect(task.status).toBe('todo')
+    expect(task.done).toBeUndefined()
   })
 
-  it('bascule le statut done', async () => {
+  it('bascule le statut d’une tâche (todo ↔ done)', async () => {
     const { addTask, toggleTask, loadTasks, tasks } = useTasks()
 
     await addTask('Apprendre Vitest')
@@ -44,7 +53,7 @@ describe('useTasks', () => {
     await loadTasks()
     const toggledTask = tasks.value[0]
     assertDefined(toggledTask)
-    expect(toggledTask.done).toBe(true)
+    expect(toggledTask.status).toBe('done')
   })
 
   it('supprime une tâche', async () => {
@@ -183,5 +192,135 @@ describe('useTasks', () => {
     const d = tasks.value[2]
     assertDefined(d)
     expect(d.order).toBe(3)
+  })
+})
+
+describe('backfillStatus (migration v2 → v3)', () => {
+  it('transforme done:true en status "done"', () => {
+    expect(backfillStatus({ done: true })).toBe('done')
+  })
+
+  it('transforme done:false en status "todo"', () => {
+    expect(backfillStatus({ done: false })).toBe('todo')
+  })
+
+  it('transforme l’absence de done en status "todo"', () => {
+    expect(backfillStatus({})).toBe('todo')
+  })
+})
+
+describe('migration IndexedDB v2 → v3', () => {
+  it('backfill status depuis done, supprime done, ne backfill pas parentId', async () => {
+    await __resetDbForTests()
+
+    // Ouverture d'une base v2 avec le schéma legacy (champ `done`).
+    const v2 = await openDB(DB_NAME, 2, {
+      upgrade(db) {
+        if (!db.objectStoreNames.contains('tasks')) {
+          const store = db.createObjectStore('tasks', {
+            keyPath: 'id',
+            autoIncrement: true,
+          })
+          store.createIndex('by_created', 'createdAt')
+          store.createIndex('by_order', 'order')
+        }
+      },
+    })
+    await v2.put('tasks', {
+      title: 'Fait',
+      done: true,
+      order: 0,
+      createdAt: new Date(),
+    })
+    await v2.put('tasks', {
+      title: 'À faire',
+      done: false,
+      order: 1,
+      createdAt: new Date(),
+    })
+    v2.close()
+
+    // Réouverture via getDb() → déclenche la migration v2 → v3.
+    const db = await getDb()
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+
+    expect(all).toHaveLength(2)
+    const fait = all[0]
+    const aFaire = all[1]
+    assertDefined(fait)
+    assertDefined(aFaire)
+    expect(fait).toMatchObject({ title: 'Fait', status: 'done' })
+    expect(fait.done).toBeUndefined()
+    expect(fait.parentId).toBeUndefined()
+    expect(aFaire).toMatchObject({ title: 'À faire', status: 'todo' })
+    expect(aFaire.done).toBeUndefined()
+    expect(aFaire.parentId).toBeUndefined()
+  })
+
+  it('crée la table sessions (vide) avec index by_taskId et by_status', async () => {
+    const db = await getDb()
+    expect(db.objectStoreNames.contains('sessions')).toBe(true)
+    const store = db.transaction('sessions').store
+    expect(store.indexNames.contains('by_taskId')).toBe(true)
+    expect(store.indexNames.contains('by_status')).toBe(true)
+    const count = await store.count()
+    expect(count).toBe(0)
+  })
+})
+
+describe('fuse à la lecture dans loadTasks', () => {
+  it('rétablit status depuis done pour les enregistrements non migrés (cache navigateur pourri)', async () => {
+    const db = await getDb()
+    // Insertion brute d’enregistrements v2 (sans `status`) pour simuler
+    // un cache navigateur qui servirait des données pré-migration.
+    await db.put('tasks', {
+      id: 1,
+      title: 'Fait (stale)',
+      done: true,
+      order: 0,
+      createdAt: new Date(),
+    })
+    await db.put('tasks', {
+      id: 2,
+      title: 'À faire (stale)',
+      done: false,
+      order: 1,
+      createdAt: new Date(),
+    })
+
+    const { loadTasks, tasks } = useTasks()
+    await loadTasks()
+
+    expect(tasks.value).toHaveLength(2)
+    const fait = tasks.value[0]
+    const aFaire = tasks.value[1]
+    assertDefined(fait)
+    assertDefined(aFaire)
+    expect(fait.status).toBe('done')
+    expect(aFaire.status).toBe('todo')
+  })
+
+  it('rétablit status "todo" quand done est absent et status absent', async () => {
+    const db = await getDb()
+    await db.put('tasks', {
+      id: 1,
+      title: 'Stale sans done',
+      order: 0,
+      createdAt: new Date(),
+    })
+
+    const { loadTasks, tasks } = useTasks()
+    await loadTasks()
+
+    const task = tasks.value[0]
+    assertDefined(task)
+    expect(task.status).toBe('todo')
+  })
+})
+
+describe('TaskPatch', () => {
+  it('accepte un patch title/description', () => {
+    const patch: TaskPatch = { title: 'Nouveau', description: 'Nouvelle desc' }
+    expect(patch.title).toBe('Nouveau')
   })
 })

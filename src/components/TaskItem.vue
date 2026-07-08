@@ -78,14 +78,14 @@ function onDrop(event: DragEvent) {
       <input
         type="checkbox"
         class="mt-1 size-4"
-        :checked="task.done"
-        :aria-label="`${task.done ? 'Réactiver' : 'Terminer'} « ${task.title} »`"
+        :checked="task.status === 'done'"
+        :aria-label="`${task.status === 'done' ? 'Réactiver' : 'Terminer'} « ${task.title} »`"
         @change="emit('toggle')"
       />
       <div class="flex-1">
         <p
           class="font-medium"
-          :class="{ 'text-muted-foreground line-through': task.done }"
+          :class="{ 'text-muted-foreground line-through': task.status === 'done' }"
         >
           {{ task.title }}
         </p>

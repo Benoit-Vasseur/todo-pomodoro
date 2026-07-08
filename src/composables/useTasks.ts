@@ -1,5 +1,5 @@
 import { ref, type Ref } from 'vue'
-import { getDb, type Task, type TaskPatch } from '@/db'
+import { getDb, backfillStatus, type Task, type TaskPatch } from '@/db'
 
 export function useTasks() {
   const tasks: Ref<Task[]> = ref([])
@@ -9,7 +9,15 @@ export function useTasks() {
     loading.value = true
     try {
       const db = await getDb()
-      tasks.value = await db.getAllFromIndex('tasks', 'by_order')
+      const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+      // Fuse anti-cache navigateur pourri : un enregistrement pré-migration
+      // (sans `status`) se voit réattribuer un statut à partir du champ
+      // legacy `done`. Coût nul si `status` est déjà présent.
+      tasks.value = all.map((task) =>
+        task.status === undefined
+          ? { ...task, status: backfillStatus(task) }
+          : task,
+      )
     } finally {
       loading.value = false
     }
@@ -24,7 +32,7 @@ export function useTasks() {
     const id = await db.add('tasks', {
       title,
       description,
-      done: false,
+      status: 'todo',
       order,
       createdAt: new Date(),
     })
@@ -37,10 +45,13 @@ export function useTasks() {
     const db = await getDb()
     const task = await db.get('tasks', id)
     if (!task) return
-    task.done = !task.done
-    await db.put('tasks', task)
+    // T1 : bascule binaire todo ↔ done. T6 affinera la sémantique
+    // (cocher depuis `doing` → `done`, déclencheur « Démarrer » explicite).
+    const next = task.status === 'done' ? 'todo' : 'done'
+    const updated = { ...task, status: next }
+    await db.put('tasks', updated)
     const idx = tasks.value.findIndex((t) => t.id === id)
-    if (idx !== -1) tasks.value[idx] = task
+    if (idx !== -1) tasks.value[idx] = updated
   }
 
   async function updateTask(id: number, patch: TaskPatch) {
