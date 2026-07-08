@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import TaskItem from '@/components/TaskItem.vue'
 import { useTasks } from '@/composables/useTasks'
+import { usePomodoroCounts } from '@/composables/usePomodoroCounts'
 import type { Task, TaskPatch } from '@/db'
 
 const {
@@ -20,6 +21,10 @@ const {
   reorderTask,
 } = useTasks()
 
+// Compteurs dérivés des sessions (ADR #0006). La table `sessions` est vide
+// en #4 → tous les compteurs valent 0 ; #5 (timer) viendra y écrire.
+const { counts, loadSessions } = usePomodoroCounts(tasks)
+
 const title = ref('')
 const description = ref('')
 const draggedId = ref<number | null>(null)
@@ -28,6 +33,7 @@ const statusError = ref<string | null>(null)
 interface DisplayRow {
   task: Task
   depth: number
+  pomodoroCount: number
 }
 
 // Affichage hiérarchique : racines (par order) suivies de leurs sous-tâches
@@ -38,12 +44,20 @@ const displayRows = computed<DisplayRow[]>(() => {
     .filter((t) => t.parentId == null)
     .sort((a, b) => a.order - b.order)
   for (const root of roots) {
-    rows.push({ task: root, depth: 0 })
+    rows.push({
+      task: root,
+      depth: 0,
+      pomodoroCount: counts.value.get(root.id ?? -1)?.pomodoroCount ?? 0,
+    })
     const children = tasks.value
       .filter((t) => t.parentId === root.id)
       .sort((a, b) => a.order - b.order)
     for (const child of children) {
-      rows.push({ task: child, depth: 1 })
+      rows.push({
+        task: child,
+        depth: 1,
+        pomodoroCount: counts.value.get(child.id ?? -1)?.pomodoroCount ?? 0,
+      })
     }
   }
   return rows
@@ -114,7 +128,10 @@ async function onDropped(targetId: number) {
   await reorderTask(from, targetId)
 }
 
-onMounted(loadTasks)
+onMounted(async () => {
+  await loadTasks()
+  await loadSessions()
+})
 </script>
 
 <template>
@@ -150,6 +167,7 @@ onMounted(loadTasks)
         :key="row.task.id"
         :task="row.task"
         :depth="row.depth"
+        :pomodoro-count="row.pomodoroCount"
         @toggle="toggle(row.task)"
         @start="start(row.task)"
         @update="(patch) => update(row.task, patch)"

@@ -7,8 +7,8 @@ import { Textarea } from '@/components/ui/textarea'
 import type { Task, TaskPatch } from '@/db'
 
 const props = withDefaults(
-  defineProps<{ task: Task; depth?: number }>(),
-  { depth: 0 },
+  defineProps<{ task: Task; depth?: number; pomodoroCount?: number }>(),
+  { depth: 0, pomodoroCount: 0 },
 )
 const emit = defineEmits<{
   toggle: []
@@ -143,6 +143,12 @@ function onDrop(event: DragEvent) {
             class="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
             >En cours</span
           >
+          <span
+            v-if="props.pomodoroCount > 0"
+            data-testid="pomodoro-count"
+            class="text-xs text-muted-foreground"
+            >🍅 {{ props.pomodoroCount }}</span
+          >
         </div>
         <p v-if="task.description" class="text-sm text-muted-foreground">
           {{ task.description }}
@@ -179,7 +185,7 @@ function onDrop(event: DragEvent) {
       </div>
       <div class="flex flex-wrap gap-1">
         <Button
-          v-if="task.status === 'todo'"
+          v-if="task.status !== 'doing'"
           size="sm"
           :aria-label="`Démarrer « ${task.title} »`"
           @click="emit('start')"
