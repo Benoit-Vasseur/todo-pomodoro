@@ -186,18 +186,29 @@ jobs:
             echo "- [Rapport de coverage Playwright (E2E)]($PAGES_BASE/$TARGET/reports/coverage-e2e/)"
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Generate reports comment body
+        if: github.event_name == 'pull_request'
+        env:
+          TARGET: ${{ needs.wait-ci.outputs.target-dir }}
+          VALIDATE: ${{ needs.wait-ci.outputs.validate-conclusion }}
+          COVERAGE: ${{ needs.wait-ci.outputs.coverage-conclusion }}
+          PAGES_BASE: https://benoit-vasseur.github.io/todo-pomodoro
+        run: |
+          cat > reports-comment.md <<MD
+          ### Rapports deployes
+
+          **Target :** \`$TARGET\` — validate: \`$VALIDATE\` — coverage: \`$COVERAGE\`
+
+          $([ "$VALIDATE" = "success" ] && echo "- [Application (app preview)]($PAGES_BASE/$TARGET/app/)" || echo "- Application non déployée")
+          - [Rapport de tests Vitest]($PAGES_BASE/$TARGET/reports/vitest/)
+          - [Rapport de coverage Vitest]($PAGES_BASE/$TARGET/reports/coverage-vitest/)
+          - [Rapport de tests Playwright]($PAGES_BASE/$TARGET/reports/playwright/)
+          - [Rapport de coverage Playwright (E2E)]($PAGES_BASE/$TARGET/reports/coverage-e2e/)
+          MD
+
       - name: Publish reports comment on PR
         if: github.event_name == 'pull_request'
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: reports
-          message: |
-            ### 📄 Rapports déployés
-
-            **Target :** `${{ needs.wait-ci.outputs.target-dir }}` — validate: `${{ needs.wait-ci.outputs.validate-conclusion }}` — coverage: `${{ needs.wait-ci.outputs.coverage-conclusion }}`
-
-            ${{ needs.wait-ci.outputs.validate-conclusion == 'success' && '- [Application (app preview)](https://benoit-vasseur.github.io/todo-pomodoro/' + needs.wait-ci.outputs.target-dir + '/app/)' || '- Application non déployée' }}
-            - [Rapport de tests Vitest](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/vitest/)
-            - [Rapport de coverage Vitest](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/coverage-vitest/)
-            - [Rapport de tests Playwright](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/playwright/)
-            - [Rapport de coverage Playwright (E2E)](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/coverage-e2e/)
+          path: reports-comment.md
