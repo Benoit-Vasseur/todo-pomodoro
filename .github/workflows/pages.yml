@@ -14,35 +14,91 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  publish:
+  wait-ci:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+    outputs:
+      target-dir: ${{ steps.target.outputs.dir }}
+      run-id: ${{ steps.wait.outputs.run-id }}
+      validate-conclusion: ${{ steps.wait.outputs.validate-conclusion }}
+      coverage-conclusion: ${{ steps.wait.outputs.coverage-conclusion }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
       - name: Determine publish target
         id: target
         run: |
           if [ "${{ github.event_name }}" = "pull_request" ]; then
             echo "dir=pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+            echo "event=pull_request" >> "$GITHUB_OUTPUT"
           else
             echo "dir=main" >> "$GITHUB_OUTPUT"
+            echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"
+            echo "event=push" >> "$GITHUB_OUTPUT"
           fi
 
-      - run: pnpm build
+      - name: Wait for CI run
+        id: wait
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SHA: ${{ steps.target.outputs.sha }}
+          EVENT: ${{ steps.target.outputs.event }}
+        run: |
+          set -euo pipefail
+          APPEAR_DEADLINE=$(( $(date +%s) + 300 ))
+          DONE_DEADLINE=$(( $(date +%s) + 1200 ))
+          RUN_ID=""
+          while [ -z "$RUN_ID" ]; do
+            RUN_ID=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$SHA&event=$EVENT" \
+              --jq '[.workflow_runs[] | select(.path == ".github/workflows/ci.yml")] | max_by(.id) | .id // empty' 2>/dev/null || true)
+            if [ -n "$RUN_ID" ]; then break; fi
+            if [ "$(date +%s)" -ge "$APPEAR_DEADLINE" ]; then
+              echo "::error::Aucun run ci.yml trouvé pour sha=$SHA event=$EVENT après 5 min"
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Found CI run: $RUN_ID"
+          echo "run-id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+          while true; do
+            STATUS=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" --jq '.status')
+            if [ "$STATUS" = "completed" ]; then break; fi
+            if [ "$(date +%s)" -ge "$DONE_DEADLINE" ]; then
+              echo "::error::Run ci.yml $RUN_ID non complété après 20 min (status=$STATUS)"
+              exit 1
+            fi
+            sleep 30
+          done
+
+          VALIDATE=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "validate") | .conclusion' 2>/dev/null || echo "")
+          COVERAGE=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/jobs" \
+            --jq '.jobs[] | select(.name == "coverage") | .conclusion' 2>/dev/null || echo "")
+          echo "validate=$VALIDATE coverage=$COVERAGE"
+          echo "validate-conclusion=${VALIDATE:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "coverage-conclusion=${COVERAGE:-unknown}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: wait-ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Download CI artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ needs.wait-ci.outputs.run-id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish to gh-pages
         env:
-          TARGET: ${{ steps.target.outputs.dir }}
+          TARGET: ${{ needs.wait-ci.outputs.target-dir }}
+          VALIDATE: ${{ needs.wait-ci.outputs.validate-conclusion }}
+          COVERAGE: ${{ needs.wait-ci.outputs.coverage-conclusion }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PAGES_BASE: https://benoit-vasseur.github.io/todo-pomodoro
         run: |
           set -euo pipefail
           REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git"
@@ -56,14 +112,82 @@ jobs:
 
           cd gh-pages-out
           rm -rf "$TARGET"
-          mkdir -p "$TARGET/app"
-          cp -a ../dist/. "$TARGET/app/"
+          mkdir -p "$TARGET/reports"
 
-          # Root index: hub pointing at the production preview app.
-          printf '<!doctype html><html><head><meta charset="utf-8"><title>todo-pomodoro previews</title></head><body><p>See <a href="main/app/">main</a>.</p></body></html>' > index.html
+          copy_report() {
+            local src="$1" dest="$2"
+            if [ -d "../$src" ]; then
+              rm -rf "$TARGET/reports/$dest"
+              cp -a "../$src" "$TARGET/reports/$dest"
+              echo "Copied $src -> reports/$dest"
+            else
+              echo "::warning::Artefact $src absent, reports/$dest non déployé"
+            fi
+          }
+          copy_report vitest-report vitest
+          copy_report coverage-vitest coverage-vitest
+          copy_report playwright-report playwright
+          copy_report coverage-e2e coverage-e2e
+
+          APP_ITEM=""
+          if [ "$VALIDATE" = "success" ] && [ -d ../dist ]; then
+            mkdir -p "$TARGET/app"
+            cp -a ../dist/. "$TARGET/app/"
+            APP_ITEM='<li><a href="app/">Application (app preview)</a></li>'
+            echo "Copied dist -> app/"
+          else
+            APP_ITEM='<li>Application non déployée (validate: '"$VALIDATE"')</li>'
+          fi
+
+          cat > "$TARGET/index.html" <<HTMLEOF
+          <!doctype html>
+          <html lang="fr">
+          <head>
+          <meta charset="utf-8">
+          <title>todo-pomodoro — $TARGET</title>
+          </head>
+          <body>
+          <h1>todo-pomodoro — $TARGET</h1>
+          <ul>
+          $APP_ITEM
+          <li><a href="reports/vitest/">Rapport de tests Vitest</a></li>
+          <li><a href="reports/coverage-vitest/">Rapport de coverage Vitest</a></li>
+          <li><a href="reports/playwright/">Rapport de tests Playwright</a></li>
+          <li><a href="reports/coverage-e2e/">Rapport de coverage Playwright (E2E)</a></li>
+          </ul>
+          </body>
+          </html>
+          HTMLEOF
+
+          {
+            printf '<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<title>todo-pomodoro previews</title>\n</head>\n<body>\n<h1>todo-pomodoro previews</h1>\n<ul>\n'
+            for d in */; do
+              d="${d%/}"
+              if [ "$d" = "main" ] || printf '%s' "$d" | grep -qE '^pr-[0-9]+$'; then
+                printf '<li><a href="%s/">%s</a></li>\n' "$d" "$d"
+              fi
+            done
+            printf '</ul>\n</body>\n</html>\n'
+          } > index.html
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git commit -m "Publish $TARGET @ ${{ github.sha }}" || echo "No changes to commit"
           git push origin gh-pages
+
+          {
+            echo "### Previews déployées sur gh-pages"
+            echo ""
+            echo "**Target :** \`$TARGET\` — validate: \`$VALIDATE\` — coverage: \`$COVERAGE\`"
+            echo ""
+            if [ "$VALIDATE" = "success" ]; then
+              echo "- [Application (app preview)]($PAGES_BASE/$TARGET/app/)"
+            else
+              echo "- Application non déployée (validate: $VALIDATE)"
+            fi
+            echo "- [Rapport de tests Vitest]($PAGES_BASE/$TARGET/reports/vitest/)"
+            echo "- [Rapport de coverage Vitest]($PAGES_BASE/$TARGET/reports/coverage-vitest/)"
+            echo "- [Rapport de tests Playwright]($PAGES_BASE/$TARGET/reports/playwright/)"
+            echo "- [Rapport de coverage Playwright (E2E)]($PAGES_BASE/$TARGET/reports/coverage-e2e/)"
+          } >> "$GITHUB_STEP_SUMMARY"
