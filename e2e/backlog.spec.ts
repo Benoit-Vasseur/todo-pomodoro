@@ -151,3 +151,72 @@ test('crée une sous-tâche noble et l’affiche indentée sous son parent', asy
     .filter({ hasText: 'Première sous-tâche' })
   await expect(subItemAfterReload).toHaveAttribute('data-depth', '1')
 })
+
+test('le drag d’une racine déplace son groupe de sous-tâches en bloc', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Parent A + deux sous-tâches, puis parent B.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent A')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
+
+  // Sous-tâche A1.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent A' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('A1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+  await expect(page.getByText('A1', { exact: true })).toBeVisible()
+
+  // Sous-tâche A2.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent A' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('A2')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Parent B (racine suivante).
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent B')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+
+  // Ordre initial : Parent A, A1, A2, Parent B.
+  const items = page.getByRole('listitem')
+  await expect(items.nth(0)).toContainText('Parent A')
+  await expect(items.nth(1)).toContainText('A1')
+  await expect(items.nth(2)).toContainText('A2')
+  await expect(items.nth(3)).toContainText('Parent B')
+
+  // Glisser B avant A : le groupe A+A1+A2 descend en bloc.
+  const handleB = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent B' })
+    .getByTestId('drag-handle')
+  const itemA = page.getByRole('listitem').filter({ hasText: 'Parent A' })
+  await handleB.dispatchEvent('dragstart')
+  await itemA.dispatchEvent('dragover')
+  await itemA.dispatchEvent('drop')
+
+  // Nouvel ordre : Parent B, Parent A, A1, A2 (groupe déplacé en bloc).
+  await expect(items.nth(0)).toContainText('Parent B')
+  await expect(items.nth(1)).toContainText('Parent A')
+  await expect(items.nth(2)).toContainText('A1')
+  await expect(items.nth(3)).toContainText('A2')
+
+  // L'ordre persiste après reload.
+  await page.reload()
+  await expect(items.nth(0)).toContainText('Parent B')
+  await expect(items.nth(1)).toContainText('Parent A')
+  await expect(items.nth(2)).toContainText('A1')
+  await expect(items.nth(3)).toContainText('A2')
+})

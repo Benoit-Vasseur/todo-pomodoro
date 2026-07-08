@@ -109,33 +109,47 @@ export function useTasks() {
     if (draggedId === targetId) return
     const db = await getDb()
     const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
-    // Scope : racines seulement (les sous-tâches ont leur propre order,
-    // géré séparément — T4 affinera le drag intra-niveau).
-    const roots = all.filter((t) => t.parentId == null)
-    const fromIdx = roots.findIndex((t) => t.id === draggedId)
+    const dragged = all.find((t) => t.id === draggedId)
+    const target = all.find((t) => t.id === targetId)
+    if (!dragged || !target) return
+
+    // Isolation intra-niveau : on ne drague qu'au sein du même niveau.
+    //   - racines (parentId == null) entre elles
+    //   - sous-tâches d'un même parent entre elles
+    // Pas de drag inter-niveau, pas de mélange entre fratries.
+    const draggedIsRoot = dragged.parentId == null
+    const targetIsRoot = target.parentId == null
+    if (draggedIsRoot !== targetIsRoot) return
+    if (!draggedIsRoot && dragged.parentId !== target.parentId) return
+
+    const level = draggedIsRoot
+      ? all.filter((t) => t.parentId == null)
+      : all.filter((t) => t.parentId === dragged.parentId)
+
+    const fromIdx = level.findIndex((t) => t.id === draggedId)
     if (fromIdx === -1) return
-    const removed = roots.splice(fromIdx, 1)
-    const dragged = removed[0]
-    if (!dragged) return
-    const toIdx = roots.findIndex((t) => t.id === targetId)
+    const removed = level.splice(fromIdx, 1)
+    const draggedItem = removed[0]
+    if (!draggedItem) return
+    const toIdx = level.findIndex((t) => t.id === targetId)
     if (toIdx === -1) return
     // Sémantique « déposer sur la cible » : l'élément prend la place de la
     // cible — inséré avant si on remonte, après si on descend (permet
     // d'atteindre la dernière position).
     const insertAt = fromIdx <= toIdx ? toIdx + 1 : toIdx
-    roots.splice(insertAt, 0, dragged)
-    const reorderedRoots = roots.map((task, index) => ({ ...task, order: index }))
+    level.splice(insertAt, 0, draggedItem)
+    const reordered = level.map((task, index) => ({ ...task, order: index }))
     const tx = db.transaction('tasks', 'readwrite')
     await Promise.all(
-      reorderedRoots
+      reordered
         .filter((t) => t.id !== undefined)
         .map((t) => tx.store.put(t)),
     )
     await tx.done
-    // Reconstruit la liste réactive : racines réordonnées + sous-tâches
-    // (inchangées). L'affichage hiérarchique est calculé côté vue.
-    const subs = all.filter((t) => t.parentId != null)
-    tasks.value = [...reorderedRoots, ...subs]
+    // Reconstruit la liste réactive en préservant toutes les tâches : seules
+    // les tâches du niveau réordonné voient leur `order` changer. L'affichage
+    // hiérarchique (côté vue) regroupe racines + sous-tâches par parent.
+    tasks.value = all.map((t) => reordered.find((r) => r.id === t.id) ?? t)
   }
 
   return {

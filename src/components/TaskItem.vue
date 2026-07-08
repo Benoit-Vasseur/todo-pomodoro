@@ -97,7 +97,6 @@ function onDrop(event: DragEvent) {
   >
     <template v-if="!editing">
       <span
-        v-if="isRoot"
         data-testid="drag-handle"
         draggable="true"
         aria-hidden="true"

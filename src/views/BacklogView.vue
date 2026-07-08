@@ -111,7 +111,12 @@ onMounted(loadTasks)
       Le backlog est vide.
     </p>
 
-    <ul v-else class="mt-6 space-y-2">
+    <TransitionGroup
+      v-else
+      tag="ul"
+      name="task-list"
+      class="mt-6 space-y-2"
+    >
       <TaskItem
         v-for="row in displayRows"
         :key="row.task.id"
@@ -124,6 +129,14 @@ onMounted(loadTasks)
         @drag-started="onDragStarted"
         @dropped="onDropped"
       />
-    </ul>
+    </TransitionGroup>
   </main>
 </template>
+
+<style scoped>
+/* Transition FLIP : déplace visuellement les items (et les groupes de
+ * sous-tâches attachées) lors d'un réordonnancement par drag & drop. */
+.task-list-move {
+  transition: transform 200ms ease;
+}
+</style>

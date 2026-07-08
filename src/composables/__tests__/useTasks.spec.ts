@@ -258,6 +258,171 @@ describe('addSubTask — sous-tâches nobles', () => {
   })
 })
 
+describe('reorderTask — ordonnancement à deux niveaux', () => {
+  it('réordonne les racines entre elles sans toucher aux sous-tâches', async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    await addTask('B')
+    assertDefined(a)
+    assertDefined(a.id)
+    await addSubTask(a.id, 'A1')
+    await addSubTask(a.id, 'A2')
+    await loadTasks()
+
+    const b = tasks.value.find((t) => t.title === 'B')
+    assertDefined(b)
+    assertDefined(b.id)
+    // B avant A.
+    await reorderTask(b.id, a.id!)
+    await loadTasks()
+
+    const roots = tasks.value
+      .filter((t) => t.parentId == null)
+      .sort((x, y) => x.order - y.order)
+    expect(roots.map((t) => t.title)).toEqual(['B', 'A'])
+    const subs = tasks.value
+      .filter((t) => t.parentId === a.id)
+      .sort((x, y) => x.order - y.order)
+    expect(subs.map((t) => t.title)).toEqual(['A1', 'A2'])
+  })
+
+  it('réordonne les sous-tâches d’un même parent (drag intra-niveau)', async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'S1')
+    const s2 = await addSubTask(parent.id, 'S2')
+    await addSubTask(parent.id, 'S3')
+    await loadTasks()
+
+    const s1 = tasks.value.find((t) => t.title === 'S1')
+    const s3 = tasks.value.find((t) => t.title === 'S3')
+    assertDefined(s1)
+    assertDefined(s3)
+    assertDefined(s1.id)
+    assertDefined(s3.id)
+    assertDefined(s2?.id)
+    // Glisser S3 avant S1.
+    await reorderTask(s3.id, s1.id)
+    await loadTasks()
+
+    const subs = tasks.value
+      .filter((t) => t.parentId === parent.id)
+      .sort((x, y) => x.order - y.order)
+    expect(subs.map((t) => t.title)).toEqual(['S3', 'S1', 'S2'])
+  })
+
+  it('isolation : refuse de dragger une racine sur une sous-tâche (inter-niveau)', async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    await addTask('B')
+    assertDefined(a)
+    assertDefined(a.id)
+    const sub = await addSubTask(a.id, 'A1')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    await loadTasks()
+
+    const b = tasks.value.find((t) => t.title === 'B')
+    assertDefined(b)
+    assertDefined(b.id)
+    // Drag B (racine) sur A1 (sous-tâche) → no-op.
+    await reorderTask(b.id, sub.id)
+    await loadTasks()
+
+    const roots = tasks.value
+      .filter((t) => t.parentId == null)
+      .sort((x, y) => x.order - y.order)
+    // L'ordre des racines est inchangé.
+    expect(roots.map((t) => t.title)).toEqual(['A', 'B'])
+  })
+
+  it('isolation : refuse de dragger une sous-tâche sur une racine (inter-niveau)', async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    await addTask('B')
+    assertDefined(a)
+    assertDefined(a.id)
+    const sub = await addSubTask(a.id, 'A1')
+    assertDefined(sub)
+    assertDefined(sub.id)
+    await loadTasks()
+
+    const b = tasks.value.find((t) => t.title === 'B')
+    assertDefined(b)
+    assertDefined(b.id)
+    // Drag A1 (sous-tâche) sur B (racine) → no-op.
+    await reorderTask(sub.id, b.id)
+    await loadTasks()
+
+    const subs = tasks.value
+      .filter((t) => t.parentId === a.id)
+      .sort((x, y) => x.order - y.order)
+    expect(subs.map((t) => t.title)).toEqual(['A1'])
+  })
+
+  it("isolation : ne mélange pas les sous-tâches de parents différents", async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    const b = await addTask('B')
+    assertDefined(a)
+    assertDefined(b)
+    assertDefined(a.id)
+    assertDefined(b.id)
+    await addSubTask(a.id, 'A1')
+    await addSubTask(b.id, 'B1')
+    await loadTasks()
+
+    const a1 = tasks.value.find((t) => t.title === 'A1')
+    const b1 = tasks.value.find((t) => t.title === 'B1')
+    assertDefined(a1)
+    assertDefined(b1)
+    assertDefined(a1.id)
+    assertDefined(b1.id)
+    // Drag A1 sur B1 (parents différents) → no-op.
+    await reorderTask(a1.id, b1.id)
+    await loadTasks()
+
+    const subsA = tasks.value
+      .filter((t) => t.parentId === a.id)
+      .sort((x, y) => x.order - y.order)
+    const subsB = tasks.value
+      .filter((t) => t.parentId === b.id)
+      .sort((x, y) => x.order - y.order)
+    expect(subsA.map((t) => t.title)).toEqual(['A1'])
+    expect(subsB.map((t) => t.title)).toEqual(['B1'])
+  })
+
+  it('le drag d’une racine déplace son groupe (sous-tâches attachées en bloc)', async () => {
+    const { addTask, addSubTask, reorderTask, loadTasks, tasks } = useTasks()
+    const a = await addTask('A')
+    assertDefined(a)
+    assertDefined(a.id)
+    await addSubTask(a.id, 'A1')
+    await addSubTask(a.id, 'A2')
+    const b = await addTask('B')
+    assertDefined(b)
+    assertDefined(b.id)
+    await loadTasks()
+
+    // Ordre initial : A, A1, A2, B. On glisse B avant A.
+    await reorderTask(b.id, a.id!)
+    await loadTasks()
+
+    // Nouvel ordre attendu : B, A, A1, A2 (groupe A+A1+A2 déplacé en bloc).
+    const roots = tasks.value
+      .filter((t) => t.parentId == null)
+      .sort((x, y) => x.order - y.order)
+    expect(roots.map((t) => t.title)).toEqual(['B', 'A'])
+    // Les sous-tâches restent rattachées à A et ordonnées.
+    const subs = tasks.value
+      .filter((t) => t.parentId === a.id)
+      .sort((x, y) => x.order - y.order)
+    expect(subs.map((t) => t.title)).toEqual(['A1', 'A2'])
+  })
+})
+
 describe('backfillStatus (migration v2 → v3)', () => {
   it('transforme done:true en status "done"', () => {
     expect(backfillStatus({ done: true })).toBe('done')
