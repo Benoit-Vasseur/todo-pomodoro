@@ -220,3 +220,73 @@ test('le drag d’une racine déplace son groupe de sous-tâches en bloc', async
   await expect(items.nth(2)).toContainText('A1')
   await expect(items.nth(3)).toContainText('A2')
 })
+
+test('la suppression d’un parent avec sous-tâches demande confirmation en cascade', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Parent + 2 sous-tâches.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
+
+  for (const title of ['S1', 'S2']) {
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByRole('button', { name: /sous-tâche/i })
+      .click()
+    await page
+      .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+      .fill(title)
+    await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+    await expect(page.getByText(title, { exact: true })).toBeVisible()
+  }
+
+  // On capture le dialog de confirmation (synchrone : le handler doit être
+  // en place avant le click pour éviter le deadlock click↔dialog).
+  let dialogMessage = ''
+  page.on('dialog', (dialog) => {
+    dialogMessage = dialog.message()
+    dialog.accept()
+  })
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /Supprimer/ })
+    .click()
+  expect(dialogMessage).toMatch(/2 sous-tâche\(s\)/)
+
+  // Cascade : parent + sous-tâches supprimés.
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+})
+
+test('la suppression d’un parent refusée garde les sous-tâches', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('S1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Refus du dialog → rien n'est supprimé.
+  page.on('dialog', (d) => d.dismiss())
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /Supprimer/ })
+    .click()
+
+  await expect(page.getByText('Parent', { exact: true })).toBeVisible()
+  await expect(page.getByText('S1', { exact: true })).toBeVisible()
+})

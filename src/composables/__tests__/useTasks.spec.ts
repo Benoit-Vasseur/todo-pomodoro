@@ -8,6 +8,7 @@ import {
   backfillStatus,
   type Task,
   type TaskPatch,
+  type Session,
 } from '@/db'
 
 function assertDefined<T>(value: T): asserts value is NonNullable<T> {
@@ -420,6 +421,72 @@ describe('reorderTask — ordonnancement à deux niveaux', () => {
       .filter((t) => t.parentId === a.id)
       .sort((x, y) => x.order - y.order)
     expect(subs.map((t) => t.title)).toEqual(['A1', 'A2'])
+  })
+})
+
+describe('removeTask — suppression en cascade', () => {
+  it('supprime le parent et ses sous-tâches en cascade', async () => {
+    const { addTask, addSubTask, removeTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'S1')
+    await addSubTask(parent.id, 'S2')
+    await loadTasks()
+    expect(tasks.value).toHaveLength(3)
+
+    await removeTask(parent.id)
+    await loadTasks()
+    expect(tasks.value).toHaveLength(0)
+  })
+
+  it('supprime une sous-tâche seule sans affecter le parent', async () => {
+    const { addTask, addSubTask, removeTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    await addSubTask(parent.id, 'S1')
+    await loadTasks()
+
+    const s1 = tasks.value.find((t) => t.title === 'S1')
+    assertDefined(s1)
+    assertDefined(s1.id)
+    await removeTask(s1.id)
+    await loadTasks()
+    expect(tasks.value).toHaveLength(1)
+    expect(tasks.value[0]?.title).toBe('Parent')
+  })
+
+  it('ne supprime pas les sessions (immortelles, ADR #0006)', async () => {
+    const { addTask, addSubTask, removeTask, loadTasks, tasks } = useTasks()
+    const parent = await addTask('Parent')
+    assertDefined(parent)
+    assertDefined(parent.id)
+    const sub = await addSubTask(parent.id, 'S1')
+    assertDefined(sub)
+    assertDefined(sub.id)
+
+    // La table `sessions` est vide en #4, mais on vérifie l'immortalité :
+    // supprimer une tâche ne touche jamais les sessions (références mortes
+    // conservées pour les stats journalières #10).
+    const db = await getDb()
+    await db.add('sessions', {
+      taskId: parent.id,
+      startTime: new Date(),
+      status: 'completed',
+    } satisfies Session)
+    await db.add('sessions', {
+      subTaskId: sub.id,
+      startTime: new Date(),
+      status: 'interrupted',
+    } satisfies Session)
+
+    await removeTask(parent.id) // cascade : parent + sous-tâche supprimés
+    await loadTasks()
+    expect(tasks.value).toHaveLength(0)
+
+    const sessions = (await db.getAll('sessions')) as Session[]
+    expect(sessions).toHaveLength(2)
   })
 })
 

@@ -67,6 +67,16 @@ async function update(task: Task, patch: TaskPatch) {
 
 async function remove(task: Task) {
   if (task.id === undefined) return
+  // Confirmation en cascade : un parent avec sous-tâches demande une
+  // validation explicite (« Cette tâche a N sous-tâche(s). Tout supprimer ? »).
+  // Une tâche sans sous-tâche se supprime directement.
+  const subCount = tasks.value.filter((t) => t.parentId === task.id).length
+  if (subCount > 0) {
+    const ok = window.confirm(
+      `Cette tâche a ${subCount} sous-tâche(s). Tout supprimer ?`,
+    )
+    if (!ok) return
+  }
   await removeTask(task.id)
 }
 

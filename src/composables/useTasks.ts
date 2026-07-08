@@ -101,8 +101,21 @@ export function useTasks() {
 
   async function removeTask(id: number) {
     const db = await getDb()
-    await db.delete('tasks', id)
-    tasks.value = tasks.value.filter((t) => t.id !== id)
+    // Cascade : supprime aussi les sous-tâches du parent. Les sessions sont
+    // immortelles (ADR #0006) — on ne touche pas à la table `sessions`
+    // (les références mortes sont conservées pour les stats journalières #10).
+    const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
+    const children = all.filter((t) => t.parentId === id)
+    const tx = db.transaction('tasks', 'readwrite')
+    await tx.store.delete(id)
+    await Promise.all(
+      children
+        .filter((t) => t.id !== undefined)
+        .map((t) => tx.store.delete(t.id!)),
+    )
+    await tx.done
+    const removedIds = new Set([id, ...children.map((t) => t.id!)])
+    tasks.value = tasks.value.filter((t) => !removedIds.has(t.id!))
   }
 
   async function reorderTask(draggedId: number, targetId: number) {
