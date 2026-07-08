@@ -85,12 +85,15 @@ jobs:
     permissions:
       contents: write
       actions: read
+      pull-requests: write
     steps:
       - name: Download CI artifacts
         uses: actions/download-artifact@v4
         with:
           run-id: ${{ needs.wait-ci.outputs.run-id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
 
       - name: Publish to gh-pages
         env:
@@ -159,16 +162,7 @@ jobs:
           </html>
           HTMLEOF
 
-          {
-            printf '<!doctype html>\n<html lang="fr">\n<head>\n<meta charset="utf-8">\n<title>todo-pomodoro previews</title>\n</head>\n<body>\n<h1>todo-pomodoro previews</h1>\n<ul>\n'
-            for d in */; do
-              d="${d%/}"
-              if [ "$d" = "main" ] || printf '%s' "$d" | grep -qE '^pr-[0-9]+$'; then
-                printf '<li><a href="%s/">%s</a></li>\n' "$d" "$d"
-              fi
-            done
-            printf '</ul>\n</body>\n</html>\n'
-          } > index.html
+          ../.github/scripts/generate-root-index.sh .
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -191,3 +185,19 @@ jobs:
             echo "- [Rapport de tests Playwright]($PAGES_BASE/$TARGET/reports/playwright/)"
             echo "- [Rapport de coverage Playwright (E2E)]($PAGES_BASE/$TARGET/reports/coverage-e2e/)"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish reports comment on PR
+        if: github.event_name == 'pull_request'
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          header: reports
+          message: |
+            ### 📄 Rapports déployés
+
+            **Target :** `${{ needs.wait-ci.outputs.target-dir }}` — validate: `${{ needs.wait-ci.outputs.validate-conclusion }}` — coverage: `${{ needs.wait-ci.outputs.coverage-conclusion }}`
+
+            ${{ needs.wait-ci.outputs.validate-conclusion == 'success' && '- [Application (app preview)](https://benoit-vasseur.github.io/todo-pomodoro/' + needs.wait-ci.outputs.target-dir + '/app/)' || '- Application non déployée' }}
+            - [Rapport de tests Vitest](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/vitest/)
+            - [Rapport de coverage Vitest](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/coverage-vitest/)
+            - [Rapport de tests Playwright](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/playwright/)
+            - [Rapport de coverage Playwright (E2E)](https://benoit-vasseur.github.io/todo-pomodoro/${{ needs.wait-ci.outputs.target-dir }}/reports/coverage-e2e/)
