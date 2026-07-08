@@ -49,7 +49,7 @@ class CoverageReporter {
       name: 'todo-pomodoro E2E Coverage',
       outputDir: OUT_DIR,
       reports: [
-        ['html', { subdir: 'html' }],
+        ['html'],
         ['lcovonly', { file: 'lcov.info' }],
         ['text-summary', { file: 'summary.txt' }],
         ['json-summary', { file: 'coverage-summary.json' }],
