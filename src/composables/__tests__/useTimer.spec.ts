@@ -69,7 +69,7 @@ describe('useTimer', () => {
 
   it('appelle onComplete quand remaining atteint 0', () => {
     const timer = useTimer(5)
-    const onComplete = vi.fn()
+    const onComplete = vi.fn<() => void>()
     timer.onComplete(onComplete)
 
     timer.start()
@@ -82,7 +82,7 @@ describe('useTimer', () => {
 
   it('n’appelle onComplete qu’une seule fois', () => {
     const timer = useTimer(3)
-    const onComplete = vi.fn()
+    const onComplete = vi.fn<() => void>()
     timer.onComplete(onComplete)
 
     timer.start()
