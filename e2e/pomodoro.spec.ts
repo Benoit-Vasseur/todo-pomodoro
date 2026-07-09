@@ -46,25 +46,27 @@ test('abandon : démarrer une tâche B abandonne la session de A', async ({
   ).toBeVisible()
 
   // Vérifier que la session de A est abandonnée dans IndexedDB.
+  type IDB = IDBDatabase
+  type Row = { taskId: number; status: string }
   const sessions = await page.evaluate(async () => {
-    const db = await new Promise<any>((resolve, reject) => {
+    const db = await new Promise<IDB>((resolve, reject) => {
       const req = indexedDB.open('pomodoro-backlog', 3)
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
     })
     const tx = db.transaction('sessions', 'readonly')
     const store = tx.objectStore('sessions')
-    const all = await new Promise<any[]>((resolve, reject) => {
+    const all = await new Promise<Row[]>((resolve, reject) => {
       const req = store.getAll()
-      req.onsuccess = () => resolve(req.result)
+      req.onsuccess = () => resolve(req.result as Row[])
       req.onerror = () => reject(req.error)
     })
     db.close()
-    return all.map((s: any) => ({ taskId: s.taskId, status: s.status }))
+    return all.map((s) => ({ taskId: s.taskId, status: s.status }))
   })
 
   const abandonedA = sessions.find(
-    (s: any) => s.taskId === 1 && s.status === 'abandoned',
+    (s) => s.taskId === 1 && s.status === 'abandoned',
   )
   expect(abandonedA).toBeDefined()
 })
