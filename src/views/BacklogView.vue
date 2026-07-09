@@ -8,6 +8,7 @@ import TimerDisplay from '@/components/TimerDisplay.vue'
 import { useTasks } from '@/composables/useTasks'
 import { usePomodoroCounts } from '@/composables/usePomodoroCounts'
 import { useTimer } from '@/composables/useTimer'
+import { useSession } from '@/composables/useSession'
 import type { Task, TaskPatch } from '@/db'
 
 const POMODORO_DURATION = 1500 // 25 minutes
@@ -27,9 +28,11 @@ const {
 
 // Compteurs dérivés des sessions (ADR #0006).
 const { counts, loadSessions } = usePomodoroCounts(tasks)
+const { createSession } = useSession()
 
 const timer = useTimer(POMODORO_DURATION)
 const timerTaskId = ref<number | null>(null)
+const timerStartTime = ref<Date | null>(null)
 
 const title = ref('')
 const description = ref('')
@@ -98,6 +101,23 @@ async function start(task: Task) {
   await startTask(task.id)
   timer.reset()
   timerTaskId.value = task.id
+  timerStartTime.value = new Date()
+  timer.onComplete(async () => {
+    const id = timerTaskId.value
+    const start = timerStartTime.value
+    if (id == null || start == null) return
+    // Détermine si la tâche est racine ou sous-tâche
+    const t = tasks.value.find((t) => t.id === id)
+    if (!t) return
+    await createSession({
+      taskId: t.parentId ? undefined : id,
+      subTaskId: t.parentId ? id : undefined,
+      status: 'completed',
+      startTime: start,
+      endTime: new Date(),
+    })
+    await loadSessions()
+  })
   timer.start()
 }
 
