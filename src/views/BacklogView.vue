@@ -4,9 +4,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import TaskItem from '@/components/TaskItem.vue'
+import TimerDisplay from '@/components/TimerDisplay.vue'
 import { useTasks } from '@/composables/useTasks'
 import { usePomodoroCounts } from '@/composables/usePomodoroCounts'
+import { useTimer } from '@/composables/useTimer'
 import type { Task, TaskPatch } from '@/db'
+
+const POMODORO_DURATION = 1500 // 25 minutes
 
 const {
   tasks,
@@ -21,9 +25,11 @@ const {
   reorderTask,
 } = useTasks()
 
-// Compteurs dérivés des sessions (ADR #0006). La table `sessions` est vide
-// en #4 → tous les compteurs valent 0 ; #5 (timer) viendra y écrire.
+// Compteurs dérivés des sessions (ADR #0006).
 const { counts, loadSessions } = usePomodoroCounts(tasks)
+
+const timer = useTimer(POMODORO_DURATION)
+const timerTaskId = ref<number | null>(null)
 
 const title = ref('')
 const description = ref('')
@@ -90,6 +96,17 @@ async function start(task: Task) {
   if (task.id === undefined) return
   statusError.value = null
   await startTask(task.id)
+  timer.reset()
+  timerTaskId.value = task.id
+  timer.start()
+}
+
+function pauseTimer() {
+  timer.pause()
+}
+
+function resumeTimer() {
+  timer.resume()
 }
 
 async function update(task: Task, patch: TaskPatch) {
@@ -138,6 +155,17 @@ onMounted(async () => {
   <main class="mx-auto w-full max-w-2xl px-4 py-8">
     <h1 class="text-2xl font-semibold">Backlog</h1>
 
+    <TimerDisplay
+      v-if="timerTaskId != null"
+      :remaining="timer.remaining.value"
+      :is-running="timer.isRunning.value"
+      :is-paused="timer.isPaused.value"
+      class="mt-4"
+      @start-timer="timer.start()"
+      @pause-timer="pauseTimer"
+      @resume-timer="resumeTimer"
+    />
+
     <form class="mt-4 space-y-3" @submit.prevent="onSubmit">
       <div class="space-y-1">
         <label for="title" class="text-sm font-medium">Titre</label>
@@ -168,8 +196,21 @@ onMounted(async () => {
         :task="row.task"
         :depth="row.depth"
         :pomodoro-count="row.pomodoroCount"
+        :is-timer-task="row.task.id != null && row.task.id === timerTaskId"
+        :timer-running="
+          row.task.id != null &&
+          row.task.id === timerTaskId &&
+          timer.isRunning.value
+        "
+        :timer-paused="
+          row.task.id != null &&
+          row.task.id === timerTaskId &&
+          timer.isPaused.value
+        "
         @toggle="toggle(row.task)"
         @start="start(row.task)"
+        @pause-timer="pauseTimer"
+        @resume-timer="resumeTimer"
         @update="(patch) => update(row.task, patch)"
         @delete="remove(row.task)"
         @add-sub-task="(subTitle: string) => onAddSubTask(row.task, subTitle)"
