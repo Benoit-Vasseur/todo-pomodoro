@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import TaskItem from '@/components/TaskItem.vue'
 import { useTasks } from '@/composables/useTasks'
+import { usePomodoroCounts } from '@/composables/usePomodoroCounts'
 import type { Task, TaskPatch } from '@/db'
 
 const {
@@ -12,15 +13,55 @@ const {
   loading,
   loadTasks,
   addTask,
+  addSubTask,
   toggleTask,
+  startTask,
   updateTask,
   removeTask,
   reorderTask,
 } = useTasks()
 
+// Compteurs dérivés des sessions (ADR #0006). La table `sessions` est vide
+// en #4 → tous les compteurs valent 0 ; #5 (timer) viendra y écrire.
+const { counts, loadSessions } = usePomodoroCounts(tasks)
+
 const title = ref('')
 const description = ref('')
 const draggedId = ref<number | null>(null)
+const statusError = ref<string | null>(null)
+
+interface DisplayRow {
+  task: Task
+  depth: number
+  pomodoroCount: number
+}
+
+// Affichage hiérarchique : racines (par order) suivies de leurs sous-tâches
+// (par order), indentées. Calculé à partir de la liste plate `tasks`.
+const displayRows = computed<DisplayRow[]>(() => {
+  const rows: DisplayRow[] = []
+  const roots = tasks.value
+    .filter((t) => t.parentId == null)
+    .sort((a, b) => a.order - b.order)
+  for (const root of roots) {
+    rows.push({
+      task: root,
+      depth: 0,
+      pomodoroCount: counts.value.get(root.id ?? -1)?.pomodoroCount ?? 0,
+    })
+    const children = tasks.value
+      .filter((t) => t.parentId === root.id)
+      .sort((a, b) => a.order - b.order)
+    for (const child of children) {
+      rows.push({
+        task: child,
+        depth: 1,
+        pomodoroCount: counts.value.get(child.id ?? -1)?.pomodoroCount ?? 0,
+      })
+    }
+  }
+  return rows
+})
 
 async function onSubmit() {
   const trimmed = title.value.trim()
@@ -32,7 +73,23 @@ async function onSubmit() {
 
 async function toggle(task: Task) {
   if (task.id === undefined) return
-  await toggleTask(task.id)
+  statusError.value = null
+  try {
+    await toggleTask(task.id)
+  } catch (e) {
+    statusError.value = e instanceof Error ? e.message : String(e)
+    // Le statut n'a pas changé (blocage), mais le DOM de la checkbox a été
+    // modifié par le geste utilisateur. On crée de nouvelles références de
+    // tâches pour forcer Vue à réévaluer le binding :checked (one-way) et
+    // ramener la checkbox à son état réel (non cochée).
+    tasks.value = tasks.value.map((t) => ({ ...t }))
+  }
+}
+
+async function start(task: Task) {
+  if (task.id === undefined) return
+  statusError.value = null
+  await startTask(task.id)
 }
 
 async function update(task: Task, patch: TaskPatch) {
@@ -42,7 +99,22 @@ async function update(task: Task, patch: TaskPatch) {
 
 async function remove(task: Task) {
   if (task.id === undefined) return
+  // Confirmation en cascade : un parent avec sous-tâches demande une
+  // validation explicite (« Cette tâche a N sous-tâche(s). Tout supprimer ? »).
+  // Une tâche sans sous-tâche se supprime directement.
+  const subCount = tasks.value.filter((t) => t.parentId === task.id).length
+  if (subCount > 0) {
+    const ok = window.confirm(
+      `Cette tâche a ${subCount} sous-tâche(s). Tout supprimer ?`,
+    )
+    if (!ok) return
+  }
   await removeTask(task.id)
+}
+
+async function onAddSubTask(task: Task, subTitle: string) {
+  if (task.id === undefined) return
+  await addSubTask(task.id, subTitle)
 }
 
 function onDragStarted(id: number) {
@@ -56,7 +128,10 @@ async function onDropped(targetId: number) {
   await reorderTask(from, targetId)
 }
 
-onMounted(loadTasks)
+onMounted(async () => {
+  await loadTasks()
+  await loadSessions()
+})
 </script>
 
 <template>
@@ -81,17 +156,43 @@ onMounted(loadTasks)
       Le backlog est vide.
     </p>
 
-    <ul v-else class="mt-6 space-y-2">
+    <TransitionGroup
+      v-else
+      tag="ul"
+      name="task-list"
+      class="mt-6 space-y-2"
+    >
       <TaskItem
-        v-for="task in tasks"
-        :key="task.id"
-        :task="task"
-        @toggle="toggle(task)"
-        @update="(patch) => update(task, patch)"
-        @delete="remove(task)"
+        v-for="row in displayRows"
+        :key="row.task.id"
+        :task="row.task"
+        :depth="row.depth"
+        :pomodoro-count="row.pomodoroCount"
+        @toggle="toggle(row.task)"
+        @start="start(row.task)"
+        @update="(patch) => update(row.task, patch)"
+        @delete="remove(row.task)"
+        @add-sub-task="(subTitle: string) => onAddSubTask(row.task, subTitle)"
         @drag-started="onDragStarted"
         @dropped="onDropped"
       />
-    </ul>
+    </TransitionGroup>
+
+    <p
+      v-if="statusError"
+      role="alert"
+      data-testid="status-error"
+      class="mt-2 text-sm text-destructive"
+    >
+      {{ statusError }}
+    </p>
   </main>
 </template>
+
+<style scoped>
+/* Transition FLIP : déplace visuellement les items (et les groupes de
+ * sous-tâches attachées) lors d'un réordonnancement par drag & drop. */
+.task-list-move {
+  transition: transform 200ms ease;
+}
+</style>

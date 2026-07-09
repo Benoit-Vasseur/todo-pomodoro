@@ -1,26 +1,52 @@
 <script setup lang="ts">
-import { ref, useId } from 'vue'
+import { ref, useId, watch } from 'vue'
 import { GripVertical } from '@lucide/vue'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import type { Task, TaskPatch } from '@/db'
 
-const props = defineProps<{ task: Task }>()
+const props = withDefaults(
+  defineProps<{ task: Task; depth?: number; pomodoroCount?: number }>(),
+  { depth: 0, pomodoroCount: 0 },
+)
 const emit = defineEmits<{
   toggle: []
   update: [patch: TaskPatch]
   delete: []
   dragStarted: [id: number]
   dropped: [targetId: number]
+  addSubTask: [title: string]
+  start: []
 }>()
 
 const editing = ref(false)
 const draftTitle = ref('')
 const draftDescription = ref('')
 
+const addingSubTask = ref(false)
+const subTaskTitle = ref('')
+
 const titleId = useId()
 const descriptionId = useId()
+const subTaskTitleId = useId()
+
+const isRoot = props.depth === 0
+
+// Ref impérative sur la checkbox : le binding :checked (one-way) n'est pas
+// re-patché par Vue quand la valeur est inchangée (false→false). Or, lors
+// d'un blocage (toggle rejeté), le DOM a été modifié par le geste utilisateur
+// et doit être resynchronisé. Le watch sur props.task (référence qui change
+// quand le parent re-émet la liste) force la resynchronisation.
+const checkboxRef = ref<HTMLInputElement | null>(null)
+watch(
+  () => props.task,
+  () => {
+    if (checkboxRef.value) {
+      checkboxRef.value.checked = props.task.status === 'done'
+    }
+  },
+)
 
 function startEdit() {
   draftTitle.value = props.task.title
@@ -42,6 +68,24 @@ function save() {
   editing.value = false
 }
 
+function startAddSubTask() {
+  subTaskTitle.value = ''
+  addingSubTask.value = true
+}
+
+function cancelAddSubTask() {
+  addingSubTask.value = false
+  subTaskTitle.value = ''
+}
+
+function submitSubTask() {
+  const title = subTaskTitle.value.trim()
+  if (!title) return
+  emit('addSubTask', title)
+  addingSubTask.value = false
+  subTaskTitle.value = ''
+}
+
 function onDragStart(event: DragEvent) {
   if (props.task.id === undefined) return
   emit('dragStarted', props.task.id)
@@ -61,7 +105,9 @@ function onDrop(event: DragEvent) {
 
 <template>
   <li
+    :data-depth="props.depth"
     class="flex items-start gap-3 rounded-md border border-border bg-card p-3"
+    :class="props.depth > 0 ? 'ml-6' : ''"
     @dragover.prevent
     @drop="onDrop"
   >
@@ -76,24 +122,83 @@ function onDrop(event: DragEvent) {
         <GripVertical class="size-4" />
       </span>
       <input
+        ref="checkboxRef"
         type="checkbox"
         class="mt-1 size-4"
-        :checked="task.done"
-        :aria-label="`${task.done ? 'Réactiver' : 'Terminer'} « ${task.title} »`"
+        :checked="task.status === 'done'"
+        :aria-label="`${task.status === 'done' ? 'Réactiver' : 'Terminer'} « ${task.title} »`"
         @change="emit('toggle')"
       />
       <div class="flex-1">
-        <p
-          class="font-medium"
-          :class="{ 'text-muted-foreground line-through': task.done }"
-        >
-          {{ task.title }}
-        </p>
+        <div class="flex items-center gap-2">
+          <p
+            class="font-medium"
+            :class="{ 'text-muted-foreground line-through': task.status === 'done' }"
+          >
+            {{ task.title }}
+          </p>
+          <span
+            v-if="task.status === 'doing'"
+            data-testid="status-doing"
+            class="rounded bg-amber-500/15 px-1.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400"
+            >En cours</span
+          >
+          <span
+            v-if="props.pomodoroCount > 0"
+            data-testid="pomodoro-count"
+            class="text-xs text-muted-foreground"
+            >🍅 {{ props.pomodoroCount }}</span
+          >
+        </div>
         <p v-if="task.description" class="text-sm text-muted-foreground">
           {{ task.description }}
         </p>
+
+        <form
+          v-if="addingSubTask"
+          class="mt-2 space-y-2"
+          @submit.prevent="submitSubTask"
+        >
+          <div class="space-y-1">
+            <label :for="subTaskTitleId" class="text-sm font-medium"
+              >Titre de la sous-tâche</label
+            >
+            <Input
+              :id="subTaskTitleId"
+              v-model="subTaskTitle"
+              type="text"
+              placeholder="Titre de la sous-tâche"
+              required
+            />
+          </div>
+          <div class="flex gap-1">
+            <Button type="submit" size="sm">Ajouter la sous-tâche</Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              @click="cancelAddSubTask"
+              >Annuler</Button
+            >
+          </div>
+        </form>
       </div>
-      <div class="flex gap-1">
+      <div class="flex flex-wrap gap-1">
+        <Button
+          v-if="task.status !== 'doing'"
+          size="sm"
+          :aria-label="`Démarrer « ${task.title} »`"
+          @click="emit('start')"
+          >Démarrer</Button
+        >
+        <Button
+          v-if="isRoot"
+          variant="ghost"
+          size="sm"
+          :aria-label="`Ajouter une sous-tâche à « ${task.title} »`"
+          @click="startAddSubTask"
+          >+ Sous-tâche</Button
+        >
         <Button
           variant="ghost"
           size="sm"

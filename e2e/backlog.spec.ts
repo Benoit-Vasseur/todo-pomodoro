@@ -18,7 +18,7 @@ test('parcours complet CRUD backlog avec persistance', async ({ page }) => {
   await page
     .getByRole('textbox', { name: 'Description' })
     .fill('Définir le périmètre')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
 
   // Lister : la tâche apparaît dans le backlog.
   await expect(page.getByText('Écrire un brief', { exact: true })).toBeVisible()
@@ -67,13 +67,13 @@ test('réordonne les tâches par drag & drop', async ({ page }) => {
   await expect(page.getByText('Le backlog est vide.')).toBeVisible()
 
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche A')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
   // On attend que le formulaire soit réinitialisé avant de saisir la suivante
   // (addTask est asynchrone : sans cela, la 2e saisie peut écraser le reset).
   await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
 
   await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche B')
-  await page.getByRole('button', { name: 'Ajouter' }).click()
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
 
   // Ordre initial : A puis B.
@@ -99,4 +99,277 @@ test('réordonne les tâches par drag & drop', async ({ page }) => {
   await page.reload()
   await expect(page.getByRole('listitem').nth(0)).toContainText('Tâche B')
   await expect(page.getByRole('listitem').nth(1)).toContainText('Tâche A')
+})
+
+test('crée une sous-tâche noble et l’affiche indentée sous son parent', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Créer une tâche parent.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Tâche parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByText('Tâche parent', { exact: true })).toBeVisible()
+
+  // Déplier le champ inline « + Sous-tâche » sur le parent.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Tâche parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+
+  // Saisir le titre de la sous-tâche et valider.
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('Première sous-tâche')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // La sous-tâche apparaît sous le parent, indentée (data-testid sur l'item).
+  const subItem = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Première sous-tâche' })
+  await expect(subItem).toBeVisible()
+  await expect(subItem).toHaveAttribute('data-depth', '1')
+
+  // Le parent précède la sous-tâche dans l'ordre d'affichage.
+  const items = page.getByRole('listitem')
+  await expect(items.nth(0)).toContainText('Tâche parent')
+  await expect(items.nth(1)).toContainText('Première sous-tâche')
+
+  // La sous-tâche n'expose pas de bouton « + Sous-tâche » (récursion interdite).
+  await expect(
+    subItem.getByRole('button', { name: /Ajouter une sous-tâche/i }),
+  ).toHaveCount(0)
+
+  // Persistance : la hiérarchie survit au reload.
+  await page.reload()
+  await expect(page.getByText('Tâche parent', { exact: true })).toBeVisible()
+  await expect(page.getByText('Première sous-tâche', { exact: true })).toBeVisible()
+  const subItemAfterReload = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Première sous-tâche' })
+  await expect(subItemAfterReload).toHaveAttribute('data-depth', '1')
+})
+
+test('le drag d’une racine déplace son groupe de sous-tâches en bloc', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Parent A + deux sous-tâches, puis parent B.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent A')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
+
+  // Sous-tâche A1.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent A' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('A1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+  await expect(page.getByText('A1', { exact: true })).toBeVisible()
+
+  // Sous-tâche A2.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent A' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('A2')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Parent B (racine suivante).
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent B')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+
+  // Ordre initial : Parent A, A1, A2, Parent B.
+  const items = page.getByRole('listitem')
+  await expect(items.nth(0)).toContainText('Parent A')
+  await expect(items.nth(1)).toContainText('A1')
+  await expect(items.nth(2)).toContainText('A2')
+  await expect(items.nth(3)).toContainText('Parent B')
+
+  // Glisser B avant A : le groupe A+A1+A2 descend en bloc.
+  const handleB = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent B' })
+    .getByTestId('drag-handle')
+  const itemA = page.getByRole('listitem').filter({ hasText: 'Parent A' })
+  await handleB.dispatchEvent('dragstart')
+  await itemA.dispatchEvent('dragover')
+  await itemA.dispatchEvent('drop')
+
+  // Nouvel ordre : Parent B, Parent A, A1, A2 (groupe déplacé en bloc).
+  await expect(items.nth(0)).toContainText('Parent B')
+  await expect(items.nth(1)).toContainText('Parent A')
+  await expect(items.nth(2)).toContainText('A1')
+  await expect(items.nth(3)).toContainText('A2')
+
+  // L'ordre persiste après reload.
+  await page.reload()
+  await expect(items.nth(0)).toContainText('Parent B')
+  await expect(items.nth(1)).toContainText('Parent A')
+  await expect(items.nth(2)).toContainText('A1')
+  await expect(items.nth(3)).toContainText('A2')
+})
+
+test('la suppression d’un parent avec sous-tâches demande confirmation en cascade', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+
+  // Parent + 2 sous-tâches.
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await expect(page.getByRole('textbox', { name: 'Titre' })).toHaveValue('')
+
+  for (const title of ['S1', 'S2']) {
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByRole('button', { name: /sous-tâche/i })
+      .click()
+    await page
+      .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+      .fill(title)
+    await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+    await expect(page.getByText(title, { exact: true })).toBeVisible()
+  }
+
+  // On capture le dialog de confirmation (synchrone : le handler doit être
+  // en place avant le click pour éviter le deadlock click↔dialog).
+  let dialogMessage = ''
+  page.on('dialog', (dialog) => {
+    dialogMessage = dialog.message()
+    dialog.accept()
+  })
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /Supprimer/ })
+    .click()
+  expect(dialogMessage).toMatch(/2 sous-tâche\(s\)/)
+
+  // Cascade : parent + sous-tâches supprimés.
+  await expect(page.getByText('Le backlog est vide.')).toBeVisible()
+})
+
+test('la suppression d’un parent refusée garde les sous-tâches', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('S1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Refus du dialog → rien n'est supprimé.
+  page.on('dialog', (d) => d.dismiss())
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /Supprimer/ })
+    .click()
+
+  await expect(page.getByText('Parent', { exact: true })).toBeVisible()
+  await expect(page.getByText('S1', { exact: true })).toBeVisible()
+})
+
+test('démarrer une sous-tâche propage le statut en cours au parent', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('button', { name: /sous-tâche/i })
+    .click()
+  await page
+    .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+    .fill('S1')
+  await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+
+  // Démarrer la sous-tâche.
+  await page
+    .getByRole('listitem')
+    .filter({ hasText: 'S1' })
+    .getByRole('button', { name: /Démarrer/ })
+    .click()
+
+  // La sous-tâche et le parent affichent « En cours ».
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'S1' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+
+  // Persistance après reload.
+  await page.reload()
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByTestId('status-doing'),
+  ).toBeVisible()
+})
+
+test('le blocage d’un parent terminé affiche le feedback « N sous-tâche(s) »', async ({
+  page,
+}) => {
+  await page.goto('/')
+  await page.getByRole('textbox', { name: 'Titre' }).fill('Parent')
+  await page.getByRole('button', { name: 'Ajouter', exact: true }).click()
+  for (const t of ['S1', 'S2']) {
+    await page
+      .getByRole('listitem')
+      .filter({ hasText: 'Parent' })
+      .getByRole('button', { name: /sous-tâche/i })
+      .click()
+    await page
+      .getByRole('textbox', { name: /Titre de la sous-tâche/i })
+      .fill(t)
+    await page.getByRole('button', { name: /Ajouter la sous-tâche/i }).click()
+    await expect(page.getByText(t, { exact: true })).toBeVisible()
+  }
+
+  // Tenter de cocher le parent (checkbox) → blocage, feedback affiché.
+  // On utilise .click() (et non .check()) car le toggle est rejeté : la
+  // checkbox revient à non-cochée, ce que .check() interpréterait comme un
+  // échec et ferait reboucler.
+  const parentCheckbox = page
+    .getByRole('listitem')
+    .filter({ hasText: 'Parent' })
+    .getByRole('checkbox', { name: /Parent/ })
+  await parentCheckbox.click()
+
+  await expect(page.getByTestId('status-error')).toHaveText(
+    /Il reste 2 sous-tâche\(s\) non terminée\(s\)/,
+  )
+  // La checkbox reste décochée (le parent n'est pas terminé).
+  await expect(parentCheckbox).not.toBeChecked()
 })
