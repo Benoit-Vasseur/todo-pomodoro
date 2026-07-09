@@ -7,8 +7,21 @@ import { Textarea } from '@/components/ui/textarea'
 import type { Task, TaskPatch } from '@/db'
 
 const props = withDefaults(
-  defineProps<{ task: Task; depth?: number; pomodoroCount?: number }>(),
-  { depth: 0, pomodoroCount: 0 },
+  defineProps<{
+    task: Task
+    depth?: number
+    pomodoroCount?: number
+    isTimerTask?: boolean
+    timerRunning?: boolean
+    timerPaused?: boolean
+  }>(),
+  {
+    depth: 0,
+    pomodoroCount: 0,
+    isTimerTask: false,
+    timerRunning: false,
+    timerPaused: false,
+  },
 )
 const emit = defineEmits<{
   toggle: []
@@ -18,6 +31,8 @@ const emit = defineEmits<{
   dropped: [targetId: number]
   addSubTask: [title: string]
   start: []
+  pauseTimer: []
+  resumeTimer: []
 }>()
 
 const editing = ref(false)
@@ -106,8 +121,11 @@ function onDrop(event: DragEvent) {
 <template>
   <li
     :data-depth="props.depth"
-    class="flex items-start gap-3 rounded-md border border-border bg-card p-3"
-    :class="props.depth > 0 ? 'ml-6' : ''"
+    class="flex items-start gap-3 rounded-md border border-border p-3"
+    :class="[
+      props.depth > 0 ? 'ml-6' : '',
+      props.isTimerTask ? 'bg-amber-50 dark:bg-amber-950/30' : 'bg-card',
+    ]"
     @dragover.prevent
     @drop="onDrop"
   >
@@ -185,7 +203,21 @@ function onDrop(event: DragEvent) {
       </div>
       <div class="flex flex-wrap gap-1">
         <Button
-          v-if="task.status !== 'doing'"
+          v-if="props.isTimerTask && props.timerPaused"
+          size="sm"
+          :aria-label="`Reprendre « ${task.title} »`"
+          @click="emit('resumeTimer')"
+          >Reprendre</Button
+        >
+        <Button
+          v-else-if="props.isTimerTask && props.timerRunning"
+          size="sm"
+          :aria-label="`Mettre en pause « ${task.title} »`"
+          @click="emit('pauseTimer')"
+          >Pause</Button
+        >
+        <Button
+          v-else-if="task.status !== 'doing'"
           size="sm"
           :aria-label="`Démarrer « ${task.title} »`"
           @click="emit('start')"

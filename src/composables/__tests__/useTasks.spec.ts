@@ -612,6 +612,48 @@ describe('startTask — statut transitif + invariant « une seule en cours »', 
     expect(tasks.value.find((t) => t.title === 'A')?.status).toBe('done')
     expect(tasks.value.find((t) => t.title === 'B')?.status).toBe('doing')
   })
+
+  it('abandon : démarrer B crée une session abandoned pour A', async () => {
+    const { addTask, startTask, loadTasks } = useTasks()
+    const a = await addTask('A')
+    const b = await addTask('B')
+    assertDefined(a)
+    assertDefined(b)
+    assertDefined(a.id)
+    assertDefined(b.id)
+    await loadTasks()
+
+    await startTask(a.id)
+    // Démarrer B en passant A comme previousTimerTaskId → abandon de A
+    await startTask(b.id, a.id)
+
+    const db = await getDb()
+    const sessions = (await db.getAll('sessions')) as import('@/db').Session[]
+    // A a été déplacée → une session abandoned a été créée
+    const abandoned = sessions.find((s) => s.taskId === a.id && s.status === 'abandoned')
+    expect(abandoned).toBeDefined()
+    expect(abandoned?.startTime).toBeDefined()
+    expect(abandoned?.endTime).toBeDefined()
+  })
+
+  it("n'abandonne pas quand previousTimerTaskId n'est pas fourni", async () => {
+    const { addTask, startTask, loadTasks } = useTasks()
+    const a = await addTask('A')
+    const b = await addTask('B')
+    assertDefined(a)
+    assertDefined(b)
+    assertDefined(a.id)
+    assertDefined(b.id)
+    await loadTasks()
+
+    await startTask(a.id)
+    await startTask(b.id) // pas de previousTimerTaskId
+
+    const db = await getDb()
+    const sessions = (await db.getAll('sessions')) as import('@/db').Session[]
+    const abandoned = sessions.find((s) => s.status === 'abandoned')
+    expect(abandoned).toBeUndefined()
+  })
 })
 
 describe('toggleTask — checkbox binaire + blocage parent', () => {

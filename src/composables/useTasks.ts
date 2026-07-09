@@ -1,9 +1,10 @@
 import { ref, type Ref } from 'vue'
-import { getDb, backfillStatus, type Task, type TaskPatch } from '@/db'
+import { getDb, backfillStatus, type Task, type TaskPatch, type Session } from '@/db'
 
 export function useTasks() {
   const tasks: Ref<Task[]> = ref([])
   const loading: Ref<boolean> = ref(false)
+  const startedAt = new Map<number, Date>()
 
   async function loadTasks() {
     loading.value = true
@@ -119,7 +120,7 @@ export function useTasks() {
     tasks.value = all.map((t) => (t.id === id ? updated : t))
   }
 
-  async function startTask(id: number) {
+  async function startTask(id: number, previousTimerTaskId?: number | null) {
     const db = await getDb()
     const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
     const target = all.find((t) => t.id === id)
@@ -130,6 +131,41 @@ export function useTasks() {
     const ancestorIds = new Set<number>()
     if (target.parentId != null) {
       ancestorIds.add(target.parentId)
+    }
+
+    // Collecte des tâches déplacées avant modification : celles qui
+    // étaient 'doing' et qui vont repasser à 'todo'.
+    const now = new Date()
+    const displaced: Task[] = []
+    for (const t of all) {
+      if (t.id == null) continue
+      if (t.id === id || ancestorIds.has(t.id)) continue
+      if (t.status === 'doing') {
+        displaced.push(t)
+      }
+    }
+
+    // Création des sessions abandoned seulement pour la tâche qui était
+    // chronométrée (previousTimerTaskId). Les autres tâches déplacées
+    // (ancêtres transitifs) ne génèrent pas de session.
+    const sessionTx = db.transaction('sessions', 'readwrite')
+    for (const t of displaced) {
+      if (t.id == null) continue
+      if (previousTimerTaskId == null || t.id !== previousTimerTaskId) continue
+      const session: Session = {
+        taskId: t.parentId ? undefined : t.id,
+        subTaskId: t.parentId ? t.id : undefined,
+        status: 'abandoned',
+        startTime: startedAt.get(t.id) ?? now,
+        endTime: now,
+      }
+      await sessionTx.store.add(session)
+    }
+    await sessionTx.done
+
+    // Nettoyage des startTime des tâches déplacées.
+    for (const t of displaced) {
+      if (t.id != null) startedAt.delete(t.id)
     }
 
     // Invariant « une seule en cours » : la cible + ses ancêtres passent à
@@ -143,6 +179,7 @@ export function useTasks() {
         const next = { ...t, status: 'doing' as const }
         await tx.store.put(next)
         updated.push(next)
+        startedAt.set(t.id, now)
       } else if (t.status === 'doing') {
         const next = { ...t, status: 'todo' as const }
         await tx.store.put(next)
