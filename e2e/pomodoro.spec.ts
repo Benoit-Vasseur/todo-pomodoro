@@ -37,6 +37,14 @@ test('abandon : démarrer une tâche B abandonne la session de A', async ({
   await expect(page.getByTestId('timer-display')).toBeVisible()
   await expect(page.getByTestId('timer-display')).toHaveText('25:00')
 
+  // Vérifier que le bouton Démarrer pour A est de nouveau visible (timer de A disparu).
+  await expect(
+    page
+      .getByRole('listitem')
+      .filter({ hasText: 'Tâche A' })
+      .getByRole('button', { name: /Démarrer/ }),
+  ).toBeVisible()
+
   // Vérifier que la session de A est abandonnée dans IndexedDB.
   const sessions = await page.evaluate(async () => {
     const db = await new Promise<any>((resolve, reject) => {

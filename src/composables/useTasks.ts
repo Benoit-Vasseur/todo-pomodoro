@@ -120,7 +120,7 @@ export function useTasks() {
     tasks.value = all.map((t) => (t.id === id ? updated : t))
   }
 
-  async function startTask(id: number) {
+  async function startTask(id: number, previousTimerTaskId?: number | null) {
     const db = await getDb()
     const all = (await db.getAllFromIndex('tasks', 'by_order')) as Task[]
     const target = all.find((t) => t.id === id)
@@ -145,12 +145,13 @@ export function useTasks() {
       }
     }
 
-    // Création des sessions abandoned pour les tâches déplacées.
-    // On écrit en dehors de la transaction 'tasks' car la table sessions
-    // est indépendante — les sessions sont immortelles (ADR #0006).
+    // Création des sessions abandoned seulement pour la tâche qui était
+    // chronométrée (previousTimerTaskId). Les autres tâches déplacées
+    // (ancêtres transitifs) ne génèrent pas de session.
     const sessionTx = db.transaction('sessions', 'readwrite')
     for (const t of displaced) {
       if (t.id == null) continue
+      if (previousTimerTaskId == null || t.id !== previousTimerTaskId) continue
       const session: Session = {
         taskId: t.parentId ? undefined : t.id,
         subTaskId: t.parentId ? t.id : undefined,

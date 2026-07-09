@@ -45,6 +45,18 @@ interface DisplayRow {
   pomodoroCount: number
 }
 
+// Helper : état du timer pour une tâche donnée.
+function taskTimerState(taskId: number | undefined) {
+  if (taskId == null || taskId !== timerTaskId.value) {
+    return { isTimerTask: false, timerRunning: false, timerPaused: false } as const
+  }
+  return {
+    isTimerTask: true,
+    timerRunning: timer.isRunning.value,
+    timerPaused: timer.isPaused.value,
+  } as const
+}
+
 // Affichage hiérarchique : racines (par order) suivies de leurs sous-tâches
 // (par order), indentées. Calculé à partir de la liste plate `tasks`.
 const displayRows = computed<DisplayRow[]>(() => {
@@ -98,7 +110,7 @@ async function toggle(task: Task) {
 async function start(task: Task) {
   if (task.id === undefined) return
   statusError.value = null
-  await startTask(task.id)
+  await startTask(task.id, timerTaskId.value)
   timer.reset()
   timerTaskId.value = task.id
   timerStartTime.value = new Date()
@@ -106,7 +118,6 @@ async function start(task: Task) {
     const id = timerTaskId.value
     const start = timerStartTime.value
     if (id == null || start == null) return
-    // Détermine si la tâche est racine ou sous-tâche
     const t = tasks.value.find((t) => t.id === id)
     if (!t) return
     await createSession({
@@ -117,6 +128,8 @@ async function start(task: Task) {
       endTime: new Date(),
     })
     await loadSessions()
+    timerTaskId.value = null
+    timerStartTime.value = null
   })
   timer.start()
 }
@@ -176,7 +189,7 @@ onMounted(async () => {
     <h1 class="text-2xl font-semibold">Backlog</h1>
 
     <TimerDisplay
-      v-if="timerTaskId != null"
+      v-if="timerTaskId != null && (timer.isRunning.value || timer.isPaused.value)"
       :remaining="timer.remaining.value"
       :is-running="timer.isRunning.value"
       :is-paused="timer.isPaused.value"
@@ -216,17 +229,7 @@ onMounted(async () => {
         :task="row.task"
         :depth="row.depth"
         :pomodoro-count="row.pomodoroCount"
-        :is-timer-task="row.task.id != null && row.task.id === timerTaskId"
-        :timer-running="
-          row.task.id != null &&
-          row.task.id === timerTaskId &&
-          timer.isRunning.value
-        "
-        :timer-paused="
-          row.task.id != null &&
-          row.task.id === timerTaskId &&
-          timer.isPaused.value
-        "
+        v-bind="taskTimerState(row.task.id)"
         @toggle="toggle(row.task)"
         @start="start(row.task)"
         @pause-timer="pauseTimer"
